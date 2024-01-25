@@ -10,7 +10,9 @@ async fn main() {
                 Redirect::permanent("/2020-04-25-Writing-a-Simple-Garbage-Collector-in-C.html")
             }),
         )
-        .fallback_service(ServeDir::new("site").not_found_service(ServeFile::new("notfound.html")));
+        .fallback_service(
+            ServeDir::new("site").not_found_service(ServeFile::new("site/notfound.html")),
+        );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     axum::serve(listener, app).await.unwrap();
