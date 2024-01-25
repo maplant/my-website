@@ -3,7 +3,7 @@ use askama::Template;
 use chrono::{DateTime, NaiveDate, Utc};
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use pulldown_cmark::{CodeBlockKind, Event, Tag, Options};
+use pulldown_cmark::{CodeBlockKind, Event, Options, Tag};
 use regex::Regex;
 use std::{collections::HashMap, fs};
 use syntect::{
@@ -49,67 +49,78 @@ impl Article {
     }
 
     fn from_dir(dir: &str) -> Result<Vec<Self>> {
-	let mut output = Vec::new();
-	for entry in fs::read_dir(dir)? {
-	    let entry = entry?;
-	    let contents = fs::read_to_string(entry.path())?;
-	    let path = entry.path();
-	    let file_name = path.file_name().unwrap().to_str().unwrap();
-	    if file_name.ends_with("~") {
-		continue;
-	    }
-	    let Some(article) = Self::from_file(file_name, &contents)? else {
-		continue;
-	    };
-	    output.push(article);
-	}
-	output.sort_by(
-	    |a, b|
-	    a.date.cmp(&b.date).reverse()
-	);
-	Ok(output)
+        let mut output = Vec::new();
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let contents = fs::read_to_string(entry.path())?;
+            let path = entry.path();
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+            if file_name.ends_with("~") {
+                continue;
+            }
+            let Some(article) = Self::from_file(file_name, &contents)? else {
+                continue;
+            };
+            output.push(article);
+        }
+        output.sort_by(|a, b| a.date.cmp(&b.date).reverse());
+        Ok(output)
     }
 
     fn write(&self, path: &str) -> Result<()> {
-	fs::write(&format!("{path}/{}", self.filename), &self.render()?)?;
-	Ok(())
+        fs::write(&format!("{path}/{}", self.filename), &self.render()?)?;
+        Ok(())
     }
 }
 
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct Index<'a> {
-    articles: &'a[Article]
+    articles: &'a [Article],
 }
 
 impl<'a> Index<'a> {
-    fn new(articles: &'a[Article]) -> Self {
-	Self { articles }
+    fn new(articles: &'a [Article]) -> Self {
+        Self { articles }
     }
 
     fn write(&self, path: &str) -> Result<()> {
-	fs::write(&format!("{path}/index.html"), &self.render()?)?;
-	Ok(())
+        fs::write(&format!("{path}/index.html"), &self.render()?)?;
+        Ok(())
     }
 }
 
 #[derive(Template)]
 #[template(path = "articles.html")]
 pub struct Articles<'a> {
-    articles: &'a[Article]
+    articles: &'a [Article],
 }
 
 impl<'a> Articles<'a> {
-    fn new(articles: &'a[Article]) -> Self {
-	Self { articles }
+    fn new(articles: &'a [Article]) -> Self {
+        Self { articles }
     }
 
     fn write(&self, path: &str) -> Result<()> {
-	fs::write(&format!("{path}/articles.html"), &self.render()?)?;
-	Ok(())
+        fs::write(&format!("{path}/articles.html"), &self.render()?)?;
+        Ok(())
     }
 }
 
+#[derive(Template)]
+#[template(path = "notfound.html")]
+pub struct NotFound;
+
+impl NotFound {
+    fn new() -> Self {
+        Self
+    }
+
+    fn write(&self, path: &str) -> Result<()> {
+        fs::write(&format!("{path}/notfound.html"), &self.render()?)?;
+        Ok(())
+    }
+}
 
 #[derive(Template)]
 #[template(path = "styles.css", escape = "none")]
@@ -132,46 +143,46 @@ impl Styles {
     }
 
     pub fn write(&self, path: &str) -> Result<()> {
-	fs::write(&format!("{path}/styles.css"), &self.render()?)?;
-	Ok(())
+        fs::write(&format!("{path}/styles.css"), &self.render()?)?;
+        Ok(())
     }
 }
 
 lazy_static! {
     pub static ref LANGS: HashMap<&'static str, &'static str> = hashmap! {
-    "asp" => "ASP",
-    "html" => "HTML",
-    "batch" => "Batch File",
-    "c#" => "C#",
-    "c++" => "C++",
-    "c" => "C",
-    "css" => "CSS",
-    "clojure" => "Clojure",
-    "d" => "D",
-    "erlang" => "Erlang",
-    "go" => "Go",
-    "haskell" => "Haskell",
-    "java" => "Java",
-    "json" => "JSON",
-    "javascript" => "JavaScript",
-    "latex" => "LaTeX",
-    "lisp" => "Lisp",
-    "lua" => "Lua",
-    "makefile" => "Makefile",
-    "markdown" => "Markdown",
-    "ocaml" => "OCaml",
-    "objective-c" => "Objective-C",
-    "php" => "PHP",
-    "pascal" => "Pascal",
-    "perl" => "Perl",
-    "python" => "Python",
-    "r" => "R",
-    "ruby" => "Ruby",
-    "rust" => "Rust",
-    "sql" => "SQL",
-    "scala" => "Scala",
-    "bash" => "Bourne Again Shell (bash)",
-    "sh" => "Shell-Unix-Generic",
+	"asp" => "ASP",
+	"html" => "HTML",
+	"batch" => "Batch File",
+	"c#" => "C#",
+	"c++" => "C++",
+	"c" => "C",
+	"css" => "CSS",
+	"clojure" => "Clojure",
+	"d" => "D",
+	"erlang" => "Erlang",
+	"go" => "Go",
+	"haskell" => "Haskell",
+	"java" => "Java",
+	"json" => "JSON",
+	"javascript" => "JavaScript",
+	"latex" => "LaTeX",
+	"lisp" => "Lisp",
+	"lua" => "Lua",
+	"makefile" => "Makefile",
+	"markdown" => "Markdown",
+	"ocaml" => "OCaml",
+	"objective-c" => "Objective-C",
+	"php" => "PHP",
+	"pascal" => "Pascal",
+	"perl" => "Perl",
+	"python" => "Python",
+	"r" => "R",
+	"ruby" => "Ruby",
+	"rust" => "Rust",
+	"sql" => "SQL",
+	"scala" => "Scala",
+	"bash" => "Bourne Again Shell (bash)",
+	"sh" => "Shell-Unix-Generic",
     };
 }
 
@@ -198,7 +209,12 @@ pub fn parse_codeblock<'a>(
         match next {
             Event::Text(text) => {
                 output.push(Event::Html(
-		    format!(r#"<pre class="code">{}</pre>"#, parse_code_snippit(lang, &text).unwrap()).into()));
+                    format!(
+                        r#"<pre class="code">{}</pre>"#,
+                        parse_code_snippit(lang, &text).unwrap()
+                    )
+                    .into(),
+                ));
             }
             Event::End(_) => break,
             _ => panic!(),
@@ -233,7 +249,7 @@ pub fn parse_markdown_to_html(markdown: &str) -> String {
 pub fn compile(articles_dir: &str, output_dir: &str) -> Result<()> {
     let articles = Article::from_dir(articles_dir)?;
     for article in &articles {
-	article.write(output_dir)?;
+        article.write(output_dir)?;
     }
     let styles = Styles::new()?;
     styles.write(output_dir)?;
@@ -241,11 +257,13 @@ pub fn compile(articles_dir: &str, output_dir: &str) -> Result<()> {
     index.write(output_dir)?;
     let articles = Articles::new(&articles[..]);
     articles.write(output_dir)?;
+    let notfound = NotFound::new();
+    notfound.write(output_dir)?;
     Ok(())
 }
 
 mod filters {
     pub fn fmt_date(date: &chrono::DateTime<chrono::Utc>) -> ::askama::Result<String> {
-	Ok(format!("{}", date.format("%Y-%m-%d")))
+        Ok(format!("{}", date.format("%Y-%m-%d")))
     }
 }
