@@ -239,15 +239,15 @@ Unlike the heap, the BSS and initialized data segments and the stack are all con
 
 Before we discuss how to find the location of the data segments, let's review the order of the segments in memory:
 
-| Address      | Segment                              |
-|--------------|--------------------------------------|
-| Low address  | Text segment                         |
-| ⋮            | Initialized data                     |
-|              | BSS                                  |
-|              | Heap (grows low to high)             |
-|              | ⋮                                    |
-| ⋮            | Stack (grows hight to low (on i386)) |
-| High address | ⋮                                    |
+| Address      | Segment                             |
+|--------------|-------------------------------------|
+| Low address  | Text segment                        |
+| ⋮            | Initialized data                    |
+|              | BSS                                 |
+|              | Heap (grows low to high)            |
+|              | ⋮                                   |
+| ⋮            | Stack (grows high to low (on i386)) |
+| High address | ⋮                                   |
 
 Most modern Unix linkers export two symbols accessible to user programs that are of particular interest to us:
 
