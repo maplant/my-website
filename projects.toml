@@ -1,0 +1,35 @@
+[[projects]]
+  name = "My website"
+  description = "This website"
+  url = "https://github.com/maplant/my-website"
+  active = true
+
+[[projects]]
+  name = "scheme-rs"
+  description = "WIP Fully (well, mostly) compliant R6RS scheme implementation designed to leverage async Rust and Tokio"
+  url = "https://github.com/maplant/scheme-rs"
+  active = true
+
+[[projects]]
+  name = "al-jabr"
+  description = "Linear algebra library written in Rust designed to take advantage of const generics"
+  url = "https://github.com/maplant/al-jabr"
+  active = true
+
+[[projects]]
+  name = "Marche"
+  description = "Completely custom forum software written by me for me and my friends"
+  url = "https://github.com/maplant/marche"
+  active = true
+
+[[projects]]
+  name = "Dungeon Explorer"
+  description = "Tile based dungeon/city builder demonstrating a unique use of depth-first-search"
+  url = "https://github.com/maplant/dungeon-explorer"
+  active = false
+
+[[projects]]
+  name = "FACT"
+  description = "Programming language I designed and implemented in high school"
+  url = "https://github.com/maplant/FACT"
+  active = false

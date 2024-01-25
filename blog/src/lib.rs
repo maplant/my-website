@@ -73,15 +73,50 @@ impl Article {
     }
 }
 
+#[derive(serde::Deserialize, Clone)]
+pub struct Project {
+    name: String,
+    description: String,
+    url: String,
+    active: bool,
+}
+
+#[derive(Template, serde::Deserialize)]
+#[template(path = "projects.html")]
+pub struct Projects {
+    projects: Vec<Project>,
+}
+
+impl Projects {
+    fn active(&self) -> &[Project] {
+        let first_inactive = self.projects.iter().position(|p| !p.active).unwrap();
+        &self.projects[..first_inactive]
+    }
+
+    fn from_file(file: &str) -> Result<Self> {
+        let mut projects: Self = toml::from_str(&fs::read_to_string(file)?)?;
+        projects
+            .projects
+            .sort_by(|a, b| a.active.cmp(&b.active).reverse());
+        Ok(projects)
+    }
+
+    fn write(&self, path: &str) -> Result<()> {
+        fs::write(&format!("{path}/projects.html"), &self.render()?)?;
+        Ok(())
+    }
+}
+
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct Index<'a> {
     articles: &'a [Article],
+    projects: &'a [Project],
 }
 
 impl<'a> Index<'a> {
-    fn new(articles: &'a [Article]) -> Self {
-        Self { articles }
+    fn new(articles: &'a [Article], projects: &'a [Project]) -> Self {
+        Self { articles, projects }
     }
 
     fn write(&self, path: &str) -> Result<()> {
@@ -150,39 +185,39 @@ impl Styles {
 
 lazy_static! {
     pub static ref LANGS: HashMap<&'static str, &'static str> = hashmap! {
-	"asp" => "ASP",
-	"html" => "HTML",
-	"batch" => "Batch File",
-	"c#" => "C#",
-	"c++" => "C++",
-	"c" => "C",
-	"css" => "CSS",
-	"clojure" => "Clojure",
-	"d" => "D",
-	"erlang" => "Erlang",
-	"go" => "Go",
-	"haskell" => "Haskell",
-	"java" => "Java",
-	"json" => "JSON",
-	"javascript" => "JavaScript",
-	"latex" => "LaTeX",
-	"lisp" => "Lisp",
-	"lua" => "Lua",
-	"makefile" => "Makefile",
-	"markdown" => "Markdown",
-	"ocaml" => "OCaml",
-	"objective-c" => "Objective-C",
-	"php" => "PHP",
-	"pascal" => "Pascal",
-	"perl" => "Perl",
-	"python" => "Python",
-	"r" => "R",
-	"ruby" => "Ruby",
-	"rust" => "Rust",
-	"sql" => "SQL",
-	"scala" => "Scala",
-	"bash" => "Bourne Again Shell (bash)",
-	"sh" => "Shell-Unix-Generic",
+    "asp" => "ASP",
+    "html" => "HTML",
+    "batch" => "Batch File",
+    "c#" => "C#",
+    "c++" => "C++",
+    "c" => "C",
+    "css" => "CSS",
+    "clojure" => "Clojure",
+    "d" => "D",
+    "erlang" => "Erlang",
+    "go" => "Go",
+    "haskell" => "Haskell",
+    "java" => "Java",
+    "json" => "JSON",
+    "javascript" => "JavaScript",
+    "latex" => "LaTeX",
+    "lisp" => "Lisp",
+    "lua" => "Lua",
+    "makefile" => "Makefile",
+    "markdown" => "Markdown",
+    "ocaml" => "OCaml",
+    "objective-c" => "Objective-C",
+    "php" => "PHP",
+    "pascal" => "Pascal",
+    "perl" => "Perl",
+    "python" => "Python",
+    "r" => "R",
+    "ruby" => "Ruby",
+    "rust" => "Rust",
+    "sql" => "SQL",
+    "scala" => "Scala",
+    "bash" => "Bourne Again Shell (bash)",
+    "sh" => "Shell-Unix-Generic",
     };
 }
 
@@ -246,14 +281,16 @@ pub fn parse_markdown_to_html(markdown: &str) -> String {
     html_output
 }
 
-pub fn compile(articles_dir: &str, output_dir: &str) -> Result<()> {
+pub fn compile(projects_file: &str, articles_dir: &str, output_dir: &str) -> Result<()> {
     let articles = Article::from_dir(articles_dir)?;
     for article in &articles {
         article.write(output_dir)?;
     }
     let styles = Styles::new()?;
     styles.write(output_dir)?;
-    let index = Index::new(&articles[..articles.len().min(5)]);
+    let projects = Projects::from_file(projects_file)?;
+    projects.write(output_dir)?;
+    let index = Index::new(&articles[..articles.len().min(5)], projects.active());
     index.write(output_dir)?;
     let articles = Articles::new(&articles[..]);
     articles.write(output_dir)?;

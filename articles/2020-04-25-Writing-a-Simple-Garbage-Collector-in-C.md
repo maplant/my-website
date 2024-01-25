@@ -246,8 +246,8 @@ Before we discuss how to find the location of the data segments, let's review th
 |              | BSS                                 |
 |              | Heap (grows low to high)            |
 |              | ⋮                                   |
-| ⋮            | Stack (grows high to low (on i386)) |
-| High address | ⋮                                   |
+| ⋮            | ⋮                                   |
+| High address | Stack (grows high to low (on i386)) |
 
 Most modern Unix linkers export two symbols accessible to user programs that are of particular interest to us:
 

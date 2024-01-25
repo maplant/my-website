@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}All of my projects:{% endblock %}
+
+{% block content %}
+{% for project in projects %}
+<div style="margin-top: 10px" class="article">
+  <a href="{{project.url}}">{{project.name}}</a> - {{project.description}}
+</div>
+{% endfor %}
+{% endblock %}
