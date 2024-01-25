@@ -48,10 +48,10 @@ a:hover {
 	background-color: #cccaca;
     }
     a:link {
-	color: #660078;
+	color: #1c34b5;
     }
     a:visited {
-	color: #660078;
+	color: #1c34b5;
     }
     {{light_theme}}
 }
