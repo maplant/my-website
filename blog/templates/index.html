@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}About Me{% endblock %}
+
+{% block content %}
+<div style="display: grid">
+  <div>
+    <img src="./avatar.png" style="float: left; margin: 5px; width: 181px; height: 210px; margin-right: 15px">
+    <p>
+      Hi there! My name is Matthew Plant. I'm a systems programmer originally from the San Francisco Bay Area
+      currently living in New York.
+    </p>
+    <p>
+      I specialize in compiler engineering and programming language implementation, but I have a wide variety of
+      interests. I've been known to make game engines in my free time. 
+    </p>
+    <p>
+      My email address is <a href="mailto: maplant@protonmail.com">maplant@protonmail.com</a>. Feel free to send
+      me an email if you have any questions or comments about anything on this site.
+    </p>
+  </div>
+  <div>
+    <h3>Projects:</h3>
+    <div style="margin-top: 10px" class="article">
+      <a href="https://github.com/maplant/scheme-rs">Scheme-rs</a> - Fully (well, mostly) compliant R6RS scheme implementation designed to leverage async Rust and Tokio 
+    </div>
+    <div style="margin-top: 10px" class="article">
+      <a href="https://github.com/maplant/al-jabr">al-jabr</a> - Linear algebra library written in Rust designed to take advantage of const generics
+    </div>
+    <div style="margin-top: 10px" class="article">
+      <a href="https://github.com/maplant/marche">Marche</a> - Completely custom forum software written for me for my friends
+    </div>
+    <div style="margin-top: 10px" class="article">
+      <a href="https://github.com/maplant/dungeon-explorer">Dungeon Explorer</a> - Tile based dungeon/city builder demonstrating unique uses for depth-first-search
+    </div>
+    <div style="margin-top: 10px" class="article">
+      <a href="https://github.com/maplant/FACT">FACT</a> - Programming language I designed and implemented in high school
+    </div>
+  </div>
+  <div>
+    <h3>Most recent articles:</h3>
+    {% for article in articles %}
+    <div style="width: 100%; margin-top: 10px" class="article">
+      <a href="./{{article.filename}}">{{article.title}}</a> - published <span class="article-date">{{article.date|fmt_date}}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

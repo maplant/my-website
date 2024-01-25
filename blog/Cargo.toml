@@ -1,0 +1,16 @@
+[package]
+name = "blog"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+askama = "0.12"
+chrono = "0.4"
+lazy_static = "1"
+maplit = "1"
+pulldown-cmark = "0.9"
+regex = "1"
+syntect = "5"
+
+
