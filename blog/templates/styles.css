@@ -42,16 +42,16 @@ a:hover {
 	border: 1px solid black;
     }
     .nav-bar {
-	background-color: #cccaca;
+	background-color: #eee;
     }
     .article {
-	background-color: #cccaca;
+	background-color: #eee;
     }
     a:link {
-	color: #1c34b5;
+	color: #268bd2;
     }
     a:visited {
-	color: #1c34b5;
+	color: #268bd2;
     }
     {{light_theme}}
 }
