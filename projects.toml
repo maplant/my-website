@@ -23,7 +23,7 @@
   name = "Marche"
   description = "Fully featured forum software written in Rust using the Axum web framework" 
   features = [
-    "Uses **PostgreSQL** as a database, **S3** for file and image uploading, and deployed via **Doccker**",
+    "Uses **PostgreSQL** as a database, **S3** for file and image uploading, and deployed via **Docker**",
     "All custom **Javascript**, **HTML** and **CSS** rendered via **Jinja** templates"
   ]
   url = "https://github.com/maplant/marche"
@@ -33,7 +33,7 @@
   name = "MGF: Matt's Game Framework"
   description = "Collision detection and rigid body physics simulation library for Rust"
   features = [
-    "Implements many unique dynamic collision detection routines, such as time of impact collisions",
+    "Implements many unique dynamic collision detection routines, including exact time of impact collisions",
     "Released as a crate and downloadable via Rust's built-in package manager, Cargo"
   ]
   url = "crates.io/crates/mgf"
