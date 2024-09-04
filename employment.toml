@@ -1,0 +1,38 @@
+[[employment]]
+  title = "Software Engineer"
+  company = "Nova Labs Inc."
+  timeline = "Aug. 2022 - Aug. 2024"
+  features = [
+    "Developed and maintained open source off-chain Oracles for the Helium Mobile project using **async Rust**, **PostgreSQL** and **AWS S3**",
+    "Developed software and provided technical expertise for the successful migration from the old Helium blockchain to **Solana**"
+  ]
+
+[[employment]]
+  title = "Software Engineer"
+  company = "Second Spectrum"
+  timeline = "March 2021 - March 2022"
+  features = [
+    "Maintained and developed a distributed and highly-available player tracking software for Soccer and Basketball",
+  ]
+
+[[employment]]
+  title = "Senior Software Engineer"
+  company = "Prevoty"
+  timeline = "Dec. 2017 - Jan 2021"
+  features = [
+    "Wrote and maintained **ANTLR** grammars for all of the most popular **SQL** implementations for a legacy static analysis tool",
+    "Re-wrote the legacy SQL static anylsis tool in Rust to be more perfomant and maintainable using a novel generic parsing technique"
+  ]
+
+[[employment]]
+  title = "Software Engineering Intern"
+  company = "Google Inc."
+  timeline = "Summer of 2014, 2015 and 2016"
+  features = [
+    "(2016) Wrote Go services to automatically test video applications on consumer devices",
+    "(2015) Worked on the Census team maintaining a large and integral **C++** code base",
+    "Added new heap tracking features to Google's core profiling tools",
+    "(2014) Wrote a tool based on lib**Clang** to rename symbols across a C++ project",
+  ]
+
+  

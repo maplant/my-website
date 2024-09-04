@@ -77,6 +77,7 @@ impl Article {
 pub struct Project {
     name: String,
     description: String,
+    features: Vec<String>,
     url: String,
     active: bool,
 }
@@ -103,6 +104,46 @@ impl Projects {
 
     fn write(&self, path: &str) -> Result<()> {
         fs::write(&format!("{path}/projects.html"), &self.render()?)?;
+        Ok(())
+    }
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct Employment {
+    title: String,
+    company: String,
+    timeline: String,
+    features: Vec<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct EmploymentHistory {
+    employment: Vec<Employment>,
+}
+
+impl EmploymentHistory {
+    fn from_file(file: &str) -> Result<Self> {
+        Ok(toml::from_str(&fs::read_to_string(file)?)?)
+    }
+}
+
+#[derive(Template)]
+#[template(path = "resume.html")]
+pub struct Resume {
+    employment: Vec<Employment>,
+    projects: Vec<Project>,
+}
+
+impl Resume {
+    fn new(employment: EmploymentHistory, projects: Projects) -> Self {
+        Self {
+            employment: employment.employment,
+            projects: projects.projects,
+        }
+    }
+
+    fn write(&self, path: &str) -> Result<()> {
+        fs::write(&format!("{path}/resume.html"), &self.render()?)?;
         Ok(())
     }
 }
@@ -281,7 +322,7 @@ pub fn parse_markdown_to_html(markdown: &str) -> String {
     html_output
 }
 
-pub fn compile(projects_file: &str, articles_dir: &str, output_dir: &str) -> Result<()> {
+pub fn compile(projects_file: &str, employment_file: &str, articles_dir: &str, output_dir: &str) -> Result<()> {
     let articles = Article::from_dir(articles_dir)?;
     for article in &articles {
         article.write(output_dir)?;
@@ -296,6 +337,10 @@ pub fn compile(projects_file: &str, articles_dir: &str, output_dir: &str) -> Res
     articles.write(output_dir)?;
     let notfound = NotFound::new();
     notfound.write(output_dir)?;
+    let employment = EmploymentHistory::from_file(employment_file)?;
+    let resume = Resume::new(employment, projects);
+    resume.write(output_dir)?;
+    
     Ok(())
 }
 

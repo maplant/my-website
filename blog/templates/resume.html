@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>About Me</title>
+    <link href="./styles.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anonymous+Pro&display=swap" rel="stylesheet"> 
+  </head>
+  <body>
+    <div style="margin-bottom: 10px; padding: 10px; text-align: center">
+      <h1>Matthew Plant</h1>
+      <tt>(650) 388-6631</tt> •
+      <a href="mailto: maplant@protonmail.com">maplant@protonmail.com</a>
+      • <a href="https://www.github.com/maplant">GitHub</a>
+    </div>
+    <div style="display: grid">
+      <div>
+        <h2>Education:</h2>
+        <hr>
+        Graduated in May of 2017 with a B.S. in Computer Science from the University of Illinois at Urbana-Champaign
+      </div>
+      <div>
+        <h2>Work Experience:</h2>
+        <hr>
+        {% for employment in employment %}
+        <div style="margin:top: 10px" class="article">
+          {{employment.title}} — {{employment.company}}
+          <div style="float: right">
+            {{employment.timeline}}
+          </div>
+        </div>
+        <div style="line-height: 1.2">
+        <ul>
+          {% for feature in employment.features %}
+          <li>{{feature|markdown}}</li>
+          {% endfor %}
+        </ul>
+        {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h2>Personal Projects:</h2>
+        <hr>
+        {% for project in projects %}
+        <div style="margin-top: 10px" class="article">
+          {{project.name}} - <a href="{{project.url}}">{{project.url}}</a>
+        </div>
+        <ul>
+          <li>{{project.description}}</li>
+          {% for feature in project.features %}
+          <li>{{feature|markdown}}</li>
+          {% endfor %}
+        </ul>
+        {% endfor %}
+      </div>
+    </div>
+  </body>
+</html>

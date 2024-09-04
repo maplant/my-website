@@ -1,35 +1,54 @@
 [[projects]]
   name = "My website"
   description = "This website"
+  features = [ "Simple static website generator and file server powered by Jinja templates and Tokio" ]
   url = "https://github.com/maplant/my-website"
   active = true
 
 [[projects]]
   name = "scheme-rs"
-  description = "WIP Fully (well, mostly) compliant R6RS scheme implementation designed to leverage async Rust and Tokio"
+  description = "WIP compliant R6RS scheme implementation designed to leverage async Rust and Tokio"
+  features = []
   url = "https://github.com/maplant/scheme-rs"
   active = true
 
 [[projects]]
   name = "al-jabr"
   description = "Linear algebra library written in Rust designed to take advantage of const generics"
+  features = []
   url = "https://github.com/maplant/al-jabr"
   active = true
 
 [[projects]]
   name = "Marche"
-  description = "Completely custom forum software written by me for me and my friends"
+  description = "Fully featured forum software written in Rust using the Axum web framework" 
+  features = [
+    "Uses **PostgreSQL** as a database, **S3** for file and image uploading, and deployed via **Doccker**",
+    "All custom **Javascript**, **HTML** and **CSS** rendered via **Jinja** templates"
+  ]
   url = "https://github.com/maplant/marche"
   active = true
 
 [[projects]]
-  name = "Dungeon Explorer"
-  description = "Tile based dungeon/city builder demonstrating a unique use of depth-first-search"
-  url = "https://github.com/maplant/dungeon-explorer"
+  name = "MGF: Matt's Game Framework"
+  description = "Collision detection and rigid body physics simulation library for Rust"
+  features = [
+    "Implements many unique dynamic collision detection routines, such as time of impact collisions",
+    "Released as a crate and downloadable via Rust's built-in package manager, Cargo"
+  ]
+  url = "crates.io/crates/mgf"
   active = false
 
 [[projects]]
   name = "FACT"
   description = "Programming language I designed and implemented in high school"
+  features = []
   url = "https://github.com/maplant/FACT"
+  active = false
+
+[[projects]]
+  name = "Dungeon Explorer"
+  description = "Tile based dungeon/city builder demonstrating a unique use of depth-first-search"
+  features = []
+  url = "https://github.com/maplant/dungeon-explorer"
   active = false
