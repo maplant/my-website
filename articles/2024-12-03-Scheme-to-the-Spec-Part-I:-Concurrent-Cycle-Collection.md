@@ -374,16 +374,133 @@ Here is the code listing for the synchronous cycle collection algorithm:
 Increment(s)
     RC(S) = RC(S) + 1
     color(S) = black
-</pre>    
+</pre>
     </td>
     <td>
-<pre>    
+<pre>
 ScanRoots()
     for S in Roots
         Scan(s)
-</pre>        
+</pre>
     </td>
   </tr>
+  <tr>
+    <td>
+<pre>
+Decrement(S) 
+    RC(S) = RC(S) - 1
+    if (RC(S) == 0) 
+        Release(S) 
+    else 
+        PossibleRoot(S)
+</pre>
+    </td>
+    <td>
+<pre>
+CollectRoots()
+    for S in Roots
+        remove S from Roots
+        buffered(S) = false
+        CollectWhite(S)
+</pre>
+    </td>
+  </tr>
+
+  </tr>
+  <tr>
+    <td>
+<pre>
+Release(S)
+    for T in children(S)
+        Decrement(T)
+    color(S) = black
+    if (! buffered(S))
+        Free(S)
+</pre>
+    </td>
+    <td>
+<pre>
+MarkGray(S)
+    if (color(S) != gray)
+        color(S) = gray
+        for T in children(S)
+            Rc(T) = RC(T) - 1
+            MarkGray(T)
+</pre>
+</td>
+</tr>
+
+  <tr>
+    <td>
+<pre>
+PossibleRoot(S)
+    if (color(S) != purple)
+        color(S) = purple
+        if (! buffered(S))
+            buffered(S) = true
+            append S to Roots
+</pre>
+    </td>
+    <td>
+<pre>
+Scan(S)
+    if (color(S) == gray)
+        if (RC(S) > 0)
+            ScanBlack(S)
+        else
+            color(S) = white
+            for T in children(S)
+                Scan(T)
+</pre>
+    </td>
+  </tr>
+  
+  <tr>
+    <td>
+<pre>
+CollectCycles()
+    MarkRoots()
+    ScanRoots()
+    CollectRoots()
+</pre>
+    </td>
+    <td>
+<pre>
+ScanBlack(S)
+    color(S) = black
+    for T in children(S)
+        RC(T) = TC(T) + 1
+        if (color(T) != black)
+            ScanBlack(T)
+</pre>
+    </td>
+  </tr>
+
+<tr>
+    <td>
+<pre>
+MarkRoots()
+    for S in Roots
+        if (color(S) == purple)
+            MarkGray(S)
+        else
+            buffered(S) = false
+            remove S from Roots
+            if (color(S) == black and RC(S) == 0)
+                Free(S)
+</pre>
+    </td>
+    <td>
+<pre>
+CollectWhite(S)
+    if (color(S) == white and !buffered(S))
+        color(S) = black
+        for T in children(S)
+            CollectWhite(T)
+        Free(S)
+</pre>
+</td>
+</tr>
 </table>
 
 That's all well and good, but how does this work? Well, I will first say you should read the paper, because it is quite
