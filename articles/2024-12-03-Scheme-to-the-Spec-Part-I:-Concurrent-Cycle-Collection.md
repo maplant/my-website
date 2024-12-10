@@ -905,3 +905,326 @@ async unsafe fn process_mutation_buffer(
     }
 }
 ```
+
+With all of this set up, we can fill in rest of the functions:
+
+```rust
+// SAFETY: These values can only be accessed by one thread at once.
+static mut ROOTS: Vec<OpaqueGcPtr> = Vec::new();
+static mut CYCLE_BUFFER: Vec<Vec<OpaqueGcPtr>> = Vec::new();
+static mut CURRENT_CYCLE: Vec<OpaqueGcPtr> = Vec::new();
+
+unsafe fn increment(s: OpaqueGcPtr) {
+    *rc(s) += 1;
+    scan_black(s);
+}
+
+unsafe fn decrement(s: OpaqueGcPtr) {
+    *rc(s) -= 1;
+    if *rc(s) == 0 {
+        release(s);
+    } else {
+        possible_root(s);
+    }
+}
+
+unsafe fn release(s: OpaqueGcPtr) {
+    for_each_child(s, decrement);
+    *color(s) = Color::Black;
+    if !*buffered(s) {
+        free(s);
+    }
+}
+
+unsafe fn possible_root(s: OpaqueGcPtr) {
+    scan_black(s);
+    *color(s) = Color::Purple;
+    if !*buffered(s) {
+        *buffered(s) = true;
+        (&raw mut ROOTS).as_mut().unwrap().push(s);
+    }
+}
+
+unsafe fn process_cycles() {
+    free_cycles();
+    collect_cycles();
+    sigma_preparation();
+}
+
+unsafe fn collect_cycles() {
+    mark_roots();
+    scan_roots();
+    collect_roots();
+}
+
+// SAFETY: No function called by mark_roots may access ROOTS
+unsafe fn mark_roots() {
+    let mut new_roots = Vec::new();
+    for s in (&raw const ROOTS).as_ref().unwrap().iter() {
+        if *color(*s) == Color::Purple && *rc(*s) > 0 {
+            mark_gray(*s);
+            new_roots.push(*s);
+        } else {
+            *buffered(*s) = false;
+            if *rc(*s) == 0 {
+                free(*s);
+            }
+        }
+    }
+    ROOTS = new_roots;
+}
+
+unsafe fn scan_roots() {
+    for s in (&raw const ROOTS).as_ref().unwrap().iter() {
+        scan(*s)
+    }
+}
+
+unsafe fn collect_roots() {
+    for s in std::mem::take((&raw mut ROOTS).as_mut().unwrap()) {
+        if *color(s) == Color::White {
+            collect_white(s);
+            let current_cycle = std::mem::take((&raw mut CURRENT_CYCLE).as_mut().unwrap());
+            (&raw mut CYCLE_BUFFER)
+                .as_mut()
+                .unwrap()
+                .push(current_cycle);
+        } else {
+            *buffered(s) = false;
+        }
+    }
+}
+
+unsafe fn mark_gray(s: OpaqueGcPtr) {
+    if *color(s) != Color::Gray {
+        *color(s) = Color::Gray;
+        *crc(s) = *rc(s) as isize;
+        for_each_child(s, |t| {
+            mark_gray(t);
+            if *crc(t) > 0 {
+                *crc(t) -= 1;
+            }
+        });
+    }
+}
+
+unsafe fn scan(s: OpaqueGcPtr) {
+    if *color(s) == Color::Gray {
+        if *crc(s) == 0 {
+            *color(s) = Color::White;
+            for_each_child(s, scan);
+        } else {
+            scan_black(s);
+        }
+    }
+}
+
+unsafe fn scan_black(s: OpaqueGcPtr) {
+    if *color(s) != Color::Black {
+        *color(s) = Color::Black;
+        for_each_child(s, scan_black);
+    }
+}
+
+unsafe fn collect_white(s: OpaqueGcPtr) {
+    if *color(s) == Color::White {
+        *color(s) = Color::Orange;
+        *buffered(s) = true;
+        (&raw mut CURRENT_CYCLE).as_mut().unwrap().push(s);
+        for_each_child(s, collect_white);
+    }
+}
+
+unsafe fn sigma_preparation() {
+    for c in (&raw const CYCLE_BUFFER).as_ref().unwrap() {
+        for n in c {
+            *color(*n) = Color::Red;
+            *crc(*n) = *rc(*n) as isize;
+        }
+        for n in c {
+            for_each_child(*n, |m| {
+                if *color(m) == Color::Red && *crc(m) > 0 {
+                    *crc(m) -= 1;
+                }
+            });
+        }
+        for n in c {
+            *color(*n) = Color::Orange;
+        }
+    }
+}
+
+unsafe fn free_cycles() {
+    for c in std::mem::take((&raw mut CYCLE_BUFFER).as_mut().unwrap())
+        .into_iter()
+        .rev()
+    {
+        if delta_test(&c) && sigma_test(&c) {
+            free_cycle(&c);
+        } else {
+            refurbish(&c);
+        }
+    }
+}
+
+unsafe fn delta_test(c: &[OpaqueGcPtr]) -> bool {
+    for n in c {
+        if *color(*n) != Color::Orange {
+            return false;
+        }
+    }
+    true
+}
+
+unsafe fn sigma_test(c: &[OpaqueGcPtr]) -> bool {
+    for n in c {
+        if *crc(*n) > 0 {
+            return false;
+        }
+    }
+    true
+}
+
+unsafe fn refurbish(c: &[OpaqueGcPtr]) {
+    for (i, n) in c.iter().enumerate() {
+        match (i, *color(*n)) {
+            (0, Color::Orange) | (_, Color::Purple) => {
+                *color(*n) = Color::Purple;
+                unsafe {
+                    (&raw mut ROOTS).as_mut().unwrap().push(*n);
+                }
+            }
+            _ => {
+                *color(*n) = Color::Black;
+                *buffered(*n) = false;
+            }
+        }
+    }
+}
+
+unsafe fn free_cycle(c: &[OpaqueGcPtr]) {
+    for n in c {
+        *color(*n) = Color::Red;
+    }
+    for n in c {
+        for_each_child(*n, cyclic_decrement);
+    }
+    for n in c {
+        free(*n);
+    }
+}
+
+unsafe fn cyclic_decrement(m: OpaqueGcPtr) {
+    if *color(m) != Color::Red {
+        if *color(m) == Color::Orange {
+            *rc(m) -= 1;
+            *crc(m) -= 1;
+        } else {
+            decrement(m);
+        }
+    }
+}
+
+unsafe fn color<'a>(s: OpaqueGcPtr) -> &'a mut Color {
+    &mut (*s.as_ref().header.get()).color
+}
+
+unsafe fn rc<'a>(s: OpaqueGcPtr) -> &'a mut usize {
+    &mut (*s.as_ref().header.get()).rc
+}
+
+unsafe fn crc<'a>(s: OpaqueGcPtr) -> &'a mut isize {
+    &mut (*s.as_ref().header.get()).crc
+}
+
+unsafe fn buffered<'a>(s: OpaqueGcPtr) -> &'a mut bool {
+    &mut (*s.as_ref().header.get()).buffered
+}
+
+unsafe fn semaphore<'a>(s: OpaqueGcPtr) -> &'a Semaphore {
+    &(*s.as_ref().header.get()).semaphore
+}
+
+fn acquire_permit(semaphore: &'_ Semaphore) -> SemaphorePermit<'_> {
+    loop {
+        if let Ok(permit) = semaphore.try_acquire() {
+            return permit;
+        }
+    }
+}
+
+unsafe fn for_each_child(s: OpaqueGcPtr, visitor: unsafe fn(OpaqueGcPtr)) {
+    let permit = acquire_permit(semaphore(s));
+    (*s.as_ref().data.get()).visit_children(visitor);
+    drop(permit);
+}
+```
+
+While the collector has a snapshot of the reference counts of the system, we cannot guarantee 
+that they are an accurate reflection of the system at the time of collection. Concurrent cycle
+collection therefore works in two parts: 
+- Finding potential cycles, using essentially the same algorithm as the synchronous cycle
+  collector.
+- Determining if those cycles are safe to collect via two tests, the Σ-test and Δ-test. 
+
+I'm not going to go into the proof or the explanation, because I don't understand it well enough
+to do a better explanation than the paper, but any cycle that passes these two tests are perfectly
+safe to collect. 
+
+You may notice here that we acquire a read lock on the data for the `Gc` when we call `for_each_child`. 
+Why is this necessary? Well, I'm not entirely sure that it is, but my intuition is that even reading
+pointers that are being modified in another thread is entirely well defined behavior, even though
+we know that any value of a pointer will be valid data. So I acquire a read lock. I think it's fine.
+
+
+### Bringing it all together
+
+As a nice consequence of allowing `Arc` to be a data type, we can add a very simple unit test of
+our code. Let's be clear, this is an insufficient amount of testing! But it does demonstrate that
+we _do_ have the ability to test our code:
+
+```rust
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::gc::*;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn cycles() {
+        #[derive(Default, Trace)]
+        struct Cyclic {
+            next: Option<Gc<Cyclic>>,
+            out: Option<Arc<()>>,
+        }
+
+        let out_ptr = Arc::new(());
+
+        let a = Gc::new(Cyclic::default());
+        let b = Gc::new(Cyclic::default());
+        let c = Gc::new(Cyclic::default());
+
+        // a -> b -> c -
+        // ^----------/
+        a.write().await.next = Some(b.clone());
+        b.write().await.next = Some(c.clone());
+        b.write().await.out = Some(out_ptr.clone());
+        c.write().await.next = Some(a.clone());
+
+        assert_eq!(Arc::strong_count(&out_ptr), 2);
+
+        drop(a);
+        drop(b);
+        drop(c);
+        let mut mutation_buffer = Vec::new();
+        unsafe {
+            process_mutation_buffer(&mut mutation_buffer).await;
+            process_cycles();
+            process_cycles();
+        }
+
+        assert_eq!(Arc::strong_count(&out_ptr), 1);
+    }
+}
+```
+
