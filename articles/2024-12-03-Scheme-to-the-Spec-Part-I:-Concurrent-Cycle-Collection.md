@@ -367,7 +367,20 @@ and algorithm for automatically detecting and collecting cycles in reference cou
 
 Here is the code listing for the synchronous cycle collection algorithm:
 
-(code listing here)
+<table style="border: 0px">
+  <tr>
+    <td><code>
+Increment(s)
+    RC(S) = RC(S) + 1
+    color(S) = black
+    </code></td>
+    <td><code>
+ScanRoots()
+    for S in Roots
+        Scan(s)
+    </code></td>
+  </tr>
+</table>
 
 That's all well and good, but how does this work? Well, I will first say you should read the paper, because it is quite
 short and really approachable. But I will briefly explain how it works, leaving out a few key details. 
@@ -577,4 +590,197 @@ unsafe fn free(s: OpaqueGcPtr) {
 }
 ```
 
-[1] As outlined in (Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan)[https://dl.acm.org/doi/10.5555/646158.680003] (I found the contents of the paper [here](https://pages.cs.wisc.edu/~cymen/misc/interests/Bacon01Concurrent.pdf)).
+### Concurrent Cycle Collection
+ 
+We have all the pieces to implement the synchronous cycle collection algorithm, so we're going to move 
+right along into implementing concurrent cycle collection. It's a very similar algorithms, and I'll address
+the differences as they come along.
+
+Firstly, let's fix our `GcHeader` to have all the information it needs:
+
+```rust
+pub struct GcHeader {
+    rc: usize,
+    crc: usize,
+    color: Color,
+    buffered: bool,
+    semaphore: Semaphore,
+}
+
+enum Color {
+    /// In use or free
+    Black,
+    /// Possible member of a cycle
+    Gray,
+    /// Member of a garbage cycle
+    White,
+    /// Possible root of cycle
+    Purple,
+    /// Candidate cycle undergoing Σ-computation
+    Red,
+    /// Candidate cycle awaiting epoch boundary
+    Orange,
+}
+```
+
+You will notice that the ref counts for our `Gc` type are _not_ atomic. This is because our concurrent 
+algorithm requires a constraint: only one thread at a time can _ever_ modify the ref count, or indeed
+_any_ field in the `GcHeader`. This gives our garbage collection process exclusive read and write 
+access to the header. 
+
+What gives? How does _that_ work? Isn't this algorithm supposed to be concurrent? We don't want
+decrementing or incrementing ref counts to wait on the completion of the GC process. That would make
+our drop and clone functions blocking, which would gum up our whole system.
+
+The solution is the mutation buffer, and unbounded channel that let's us buffer incremements and 
+decrements to be handled by our collection process as it pleases.
+
+This wil allow our collector to stop processing incremements and decrements at any time and effectively
+have a snapshot of the system without causing any pauses in other threads. Since the buffer is _unbounded_,
+calling `send` is a non-blocking, sync operation:
+
+
+```rust
+#[derive(Copy, Clone)]
+struct Mutation {
+    kind: MutationKind,
+    gc: NonNull<OpaqueGc>,
+}
+
+impl Mutation {
+    fn new(kind: MutationKind, gc: NonNull<OpaqueGc>) -> Self {
+        Self { kind, gc }
+    }
+}
+
+unsafe impl Send for Mutation {}
+unsafe impl Sync for Mutation {}
+
+#[derive(Copy, Clone)]
+enum MutationKind {
+    Inc,
+    Dec,
+}
+
+/// Instead of mutations being atomic (via an atomic variable), they're buffered into
+/// "epochs", and handled by precisely one thread.
+struct MutationBuffer {
+    mutation_buffer_tx: UnboundedSender<Mutation>,
+    mutation_buffer_rx: Mutex<Option<UnboundedReceiver<Mutation>>>,
+}
+
+unsafe impl Sync for MutationBuffer {}
+
+impl Default for MutationBuffer {
+    fn default() -> Self {
+        let (mutation_buffer_tx, mutation_buffer_rx) = unbounded_channel();
+        Self {
+            mutation_buffer_tx,
+            mutation_buffer_rx: Mutex::new(Some(mutation_buffer_rx)),
+        }
+    }
+}
+
+static MUTATION_BUFFER: OnceLock<MutationBuffer> = OnceLock::new();
+
+fn inc_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
+    // SAFETY: send takes an immutable reference and is atomic
+    MUTATION_BUFFER
+        .get_or_init(MutationBuffer::default)
+        .mutation_buffer_tx
+        .send(Mutation::new(MutationKind::Inc, gc as NonNull<OpaqueGc>))
+        .unwrap();
+}
+
+fn dec_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
+    // SAFETY: send takes an immutable reference and is atomic
+    MUTATION_BUFFER
+        .get_or_init(MutationBuffer::default)
+        .mutation_buffer_tx
+        .send(Mutation::new(MutationKind::Dec, gc as NonNull<OpaqueGc>))
+        .unwrap();
+}
+```
+
+And now we finally can implement `Clone` and `Drop` for `Gc<T>`:
+
+```rust
+impl<T: Trace> Clone for Gc<T> {
+    fn clone(&self) -> Gc<T> {
+        inc_rc(self.ptr);
+        Self {
+            ptr: self.ptr,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T: Trace> Drop for Gc<T> {
+    fn drop(&mut self) {
+        dec_rc(self.ptr);
+    }
+}
+```
+
+This also presents a sturcture for our collection process: wait for some number of increments and 
+decrements, process them, then decide if we want to try to perform a collection:
+
+
+```rust
+static COLLECTOR_TASK: OnceLock<JoinHandle<()>> = OnceLock::new();
+
+pub fn init_gc() {
+    // SAFETY: We DO NOT mutate MUTATION_BUFFER, we mutate the _interior once lock_.
+    let _ = MUTATION_BUFFER.get_or_init(MutationBuffer::default);
+    let _ = COLLECTOR_TASK
+        .get_or_init(|| tokio::task::spawn(async { unsafe { run_garbage_collector().await } }));
+}
+
+const MAX_MUTATIONS_PER_EPOCH: usize = 10_000; // No idea what a good value is here.
+
+async unsafe fn run_garbage_collector() {
+    let mut last_epoch = Instant::now();
+    let mut mutation_buffer_rx = MUTATION_BUFFER
+        .get_or_init(MutationBuffer::default)
+        .mutation_buffer_rx
+        .lock()
+        .take()
+        .unwrap();
+    let mut mutation_buffer: Vec<_> = Vec::with_capacity(MAX_MUTATIONS_PER_EPOCH);
+    loop {
+        epoch(&mut last_epoch, &mut mutation_buffer).await;
+        mutation_buffer.clear();
+    }
+}
+
+async unsafe fn epoch(last_epoch: &mut Instant, mutation_buffer: &mut Vec<Mutation>) {
+    process_mutation_buffer(mutation_buffer).await;
+    let duration_since_last_epoch = Instant::now() - *last_epoch;
+    if duration_since_last_epoch > Duration::from_millis(100) {
+        tokio::task::spawn_blocking(|| unsafe { process_cycles() })
+            .await
+            .unwrap();
+        *last_epoch = Instant::now();
+    }
+}
+
+/// SAFETY: this function is _not reentrant_, may only be called by once per epoch,
+/// and must _complete_ before the next epoch.
+async unsafe fn process_mutation_buffer(
+    mutation_buffer_rx: &mut UnboundedReceiver<Mutation>,
+    mutation_buffer: &mut Vec<Mutation>
+) {
+    // SAFETY: This function has _exclusive access_ to mutate the header of
+    // _every_ garbage collected object. It does so _only now_.
+    mutation_buffer_rx
+        .recv_many(mutation_buffer, MAX_MUTATIONS_PER_EPOCH)
+        .await;
+
+    for mutation in mutation_buffer {
+        match mutation.kind {
+            MutationKind::Inc => increment(mutation.gc),
+            MutationKind::Dec => decrement(mutation.gc),
+        }
+    }
+}
+```
