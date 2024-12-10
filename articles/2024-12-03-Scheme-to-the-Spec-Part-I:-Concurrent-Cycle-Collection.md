@@ -369,16 +369,20 @@ Here is the code listing for the synchronous cycle collection algorithm:
 
 <table style="border: 0px">
   <tr>
-    <td><code>
+    <td>
+```
 Increment(s)
     RC(S) = RC(S) + 1
     color(S) = black
-    </code></td>
-    <td><code>
+```    
+    </td>
+    <td>
+```    
 ScanRoots()
     for S in Roots
         Scan(s)
-    </code></td>
+```        
+    </td>
   </tr>
 </table>
 
