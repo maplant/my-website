@@ -10,7 +10,7 @@ an implementation designed to integrate seamlessly with the async-rust ecosystem
 
 Our first article discusses how to implement Garbage-Collected smart pointers that we can use both within the interpreter
 and the interfacing Rust code. In later articles we will discuss topics such as tail call optimizations, implementing continuations, 
-and syntax transformers.
+and syntax transformers. Our final article will be implementing [on-stack replacement](https://www.graalvm.org/latest/graalvm-as-a-platform/language-implementation-framework/OnStackReplacement/) with LLVM.
 
 ## Part I: Garbage Collected Smart Pointers with Concurrent Cycle Collection
 
@@ -163,8 +163,8 @@ pub struct GcInner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: ?Sized + Send + Sync> Send for GcInner<T> {}
-unsafe impl<T: ?Sized + Send + Sync> Sync for GcInner<T> {}
+unsafe impl<T: ?Sized + Send> Send for GcInner<T> {}
+unsafe impl<T: ?Sized + Sync> Sync for GcInner<T> {}
 
 // (also necessary)
 unsafe impl Send for GcHeader {}
@@ -249,16 +249,16 @@ impl<T: ?Sized> AsRef<T> for GcReadGuard<'_, T> {
     }
 }
 
-unsafe impl<T: Send> Send for GcReadGuard<'_, T> {}
-unsafe impl<T: Sync> Sync for GcReadGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Send for GcReadGuard<'_, T> {}
+unsafe impl<T: ?Sized + Sync> Sync for GcReadGuard<'_, T> {}
 
-pub struct GcWriteGuard<'a, T> {
+pub struct GcWriteGuard<'a, T: ?Sized> {
     _permit: tokio::sync::SemaphorePermit<'a>,
     data: *mut T,
     marker: PhantomData<&'a mut T>,
 }
 
-impl<T> Deref for GcWriteGuard<'_, T> {
+impl<T> Deref for GcWriteGuard<'_, T: ?Sized> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -266,14 +266,14 @@ impl<T> Deref for GcWriteGuard<'_, T> {
     }
 }
 
-impl<T> DerefMut for GcWriteGuard<'_, T> {
+impl<T> DerefMut for GcWriteGuard<'_, T: ?Sized> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.data }
     }
 }
 
-unsafe impl<T: Send> Send for GcWriteGuard<'_, T> {}
-unsafe impl<T: Sync> Sync for GcWriteGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Send for GcWriteGuard<'_, T> {}
+unsafe impl<T: ?Sized + Sync> Sync for GcWriteGuard<'_, T> {}
 ```
 
 Again, you will notice that in both of these structs we use the same trick to ensure the desired variance 
@@ -338,8 +338,243 @@ but it doesn't seem particularly efficient. It involves recursively rooting/unro
 into a new Gc (I think). 
 
 Instead, we will use reference counting, because we _can_ pretty easily determine an object's reference count in 
-Rust.
+Rust. In Rust, an object's reference count is determined by the difference of clones and drops plus one. This is 
+because Rust has an [affine type system](https://en.wikipedia.org/wiki/Substructural_type_system#Affine_type_systems)
+for objects that do not implement `Copy`, which means that an object that does not implement `Copy` can be moved 
+at _most_ once, which means that moves do not affect the reference count of an object. Now, if we were able to construct
+a `Gc` manually, i.e. by manually instanciating its fields with a copied [`NonNull`](https://doc.rust-lang.org/std/ptr/struct.NonNull.html#impl-Copy-for-NonNull%3CT%3E),
+our invariant would not hold. But Gc's field is private, and thus we can be assured that a `Gc` can only be created
+by user code via the `new` - which instanciates a new `Gc` with a ref count of one - or `clone` functions - which
+increment the reference count. Since `drop` only runs when a variable is [no longer live](https://en.wikipedia.org/wiki/Safety_and_liveness_properties),
+we know that it corresponds to a decrement in the ref count. Drop is not _guaranteed_ to be invoked for an object, 
+a user could call [`forget`](https://doc.rust-lang.org/std/mem/fn.forget.html) with the object and its destructor
+will not be run. But practically speaking, the destructor for an object is pretty much always going to be run.
 
+Reference counting does have a pretty key problem: cycles
 
+### Cycles
+
+(fig1)
+ 
+An object can be unreachable but still have a positive reference count. This is because our data structures allow for
+_cycles_ (see fig1). Such data structures are pretty common to create, especially in functional languages like Scheme.
+But even if they _weren't_, since they _are_, a correct to the spec implementation of Scheme _must_ be able to 
+recognize such cyclical data structures and garbage collect them when appropriate. To that end, we will be implementing
+[Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan](https://dl.acm.org/doi/10.5555/646158.680003),
+and algorithm for automatically detecting and collecting cycles in reference counted data structures. 
+
+### Synchronous Cycle Collection 
+
+Here is the code listing for the synchronous cycle collection algorithm:
+
+(code listing here)
+
+That's all well and good, but how does this work? Well, I will first say you should read the paper, because it is quite
+short and really approachable. But I will briefly explain how it works, leaving out a few key details. 
+
+Cycle Collection relies on this key insight: if you were to perform a drop on every Gc in a cycle, that cycle will be 
+garbage if the remaining ref count of every node in that cycle is zero. This kind of makes sense intuitively, what we're 
+basically saying here is that if we somehow already knew that a data structure was cyclic, we could just manually sever
+an outgoing reference for some random node and the cascade of decrementing reference counts would cleanly free the whole 
+data structure. 
+
+With this in mind, we can can construct an efficient algorithm to collect cyclical garbage. We'll color the nodes in 
+different colors as they pass through different stages 
+
+- `Decrement`: When we decrement a reference count and the reference count is greater than zero, add it to our list of
+possible roots. If we've already added it before performing a collection cycle (it's been marked _purple_), skip this.
+- `Mark`: Go through the roots, and perform the test described in the previous paragraph. Practically, this works by 
+performing a depth first search on the root, marking each node gray and decrementing the reference count of each child
+and repeating the process on them. If the child is already marked gray, we skip them.
+- `Scan`: Go through the roots and recursively check their children for reference counts greater than zero. If there is
+any greater than zero, it recursively marks all of their children black to indicate the data is live. Otherwise, the 
+structure is marked white, to indicate it is ready to be freed.
+- `Collect`: Go through the roots marked white and free them. 
+
+There is one thing in particular that is not immediately clear about how we are going to fit this into our system. How do 
+we iterate over the children? We haven't put any bounds on the `T` in our `Gc<T>` beyond that it has to be `'static`. Well,
+until Rust gains a more powerful reflection story, we are going to have to add a classic Trait plus derive macro combo.
+
+### The Trace trait and derive macros
+
+Let's define the trait we need to implement the above code. Basically, we need a function that matches the following form:
+
+```
+for T in children(S):
+    F(T)
+```
+
+We can extract two type parameters from this statement: S, and F(T) where T == S. Therefore, the function we want will
+have the form `fn for_each_children(S, impl FnMut(S))`.
+
+It's not entirely obvious at first glance, but there is another function that we must pay attention to: that is `free`.
+The `free` function presented in the above code listing does _not_ correspond to how memory is freed in Rust. That is 
+because this code assumes that when we free code we are not running any of its members destructors. But we _do_ want to
+run our destructors. At least, we want to run the destructor _if_ the type is _not_ a `Gc`. We're going to have to add 
+a `finalize` function to handle a custom drop routine:
+ 
+
+```rust
+unsafe trait Trace: 'static {
+    unsafe fn visit_children(&self, visitor: unsafe fn(OpaqueGcPtr));
+    
+    unsafe fn finalize(&mut self) {
+        drop_in_place(self as *mut Self);
+    }
+}
+```
+
+These two things are in fact the _only_  two things our collection algorithm cares about in regards to the Gc's data 
+pointer. Therefore, whenever we're in the context of the collection algorithm, we will cast our Gc's into a trait object:
+
+```rust
+type OpaqueGc = GcInner<dyn Trace>;
+pub type OpaqueGcPtr = NonNull<OpaqueGc>;
+
+impl<T: Trace> Gc<T> {
+    pub unsafe fn as_opaque(&self) -> OpaqueGcPtr {
+        self.ptr as OpaqueGcPtr
+    }
+}
+``` 
+
+Now that we have our Trace trait, we can implement it for some primitive types, such as those provided by the standard
+library (or really, whatever we're using to build our data). I won't provide all of the ones I implemented, but here 
+are a few:
+
+```rust
+unsafe trait GcOrTrace: 'static {
+    unsafe fn visit_or_recurse(&self, visitor: unsafe fn(OpaqueGcPtr));
+
+    unsafe fn finalize_or_skip(&mut self);
+}
+
+unsafe impl<T: Trace> GcOrTrace for Gc<T> {
+    unsafe fn visit_or_recurse(&self, visitor: unsafe fn(OpaqueGcPtr)) {
+        visitor(self.as_opaque())
+    }
+
+    unsafe fn finalize_or_skip(&mut self) {}
+}
+
+unsafe impl<T: Trace + ?Sized> GcOrTrace for T {
+    unsafe fn visit_or_recurse(&self, visitor: unsafe fn(OpaqueGcPtr)) {
+        self.visit_children(visitor);
+    }
+
+    unsafe fn finalize_or_skip(&mut self) {
+        self.finalize();
+    }
+}
+
+unsafe impl<T> Trace for Vec<T>
+where
+    T: GcOrTrace,
+{
+    unsafe fn visit_children(&self, visitor: unsafe fn(OpaqueGcPtr)) {
+        for child in self {
+            child.visit_or_recurse(visitor);
+        }
+    }
+
+    unsafe fn finalize(&mut self) {
+        for mut child in std::mem::take(self).into_iter() {
+            child.finalize_or_skip();
+            std::mem::forget(child);
+        }
+    }
+}
+
+unsafe impl<T> Trace for Option<T>
+where
+    T: GcOrTrace,
+{
+    unsafe fn visit_children(&self, visitor: unsafe fn(OpaqueGcPtr)) {
+        if let Some(inner) = self {
+            inner.visit_or_recurse(visitor);
+        }
+    }
+
+    unsafe fn finalize(&mut self) {
+        if let Some(inner) = self {
+            inner.finalize_or_skip();
+        }
+    }
+}
+
+unsafe impl<T> Trace for std::sync::Arc<T>
+where
+    T: GcOrTrace,
+{
+    unsafe fn visit_children(&self, visitor: unsafe fn(OpaqueGcPtr)) {
+         self.as_ref().visit_or_recurse(visitor);
+    }
+}
+```
+
+If you are able to immediately spot the error in the code above, you are much smarter than
+I am. I hope you at least have the courtesy to be less good looking. Anyway, this code isn't
+correct with our current set of assumptions. And that's because of the implementation for
+Arc, which recurses into its data. 
+
+The problem is that we are basically disregarding the reference count of the `Arc`. consideer the
+following situation:
+
+(figure 3)
+
+In this case, dropping A results in our immediately dropping of C. Essentially, the `Arc` collapses
+all of the incoming references to C into one. 
+
+This is incorrect, it is probably fixable with lots more code and trait functions, but for now
+I'm just going to say "`Arcs` are _still_ required to address their own cycles with `Weak`s". 
+I'm not giving them _less_ functionality, just not _more_.
+
+Here is the correct code for `Arc`. Part of what makes this code correct is that we added an 
+explanation, so make sure to always do that. 
+
+```rust
+unsafe impl<T> Trace for std::sync::Arc<T>
+where
+    T: ?Sized + 'static,
+{
+    unsafe fn visit_children(&self, _visitor: unsafe fn(OpaqueGcPtr)) {
+        // We cannot visit the children for an Arc, as it may lead to situations
+        // were we incorrectly decrement a child twice.
+        // An Arc wrapping a Gc effectively creates an additional ref count for
+        // that Gc that we cannot access.
+    }
+}
+```
+
+I am not going to get too into the Trait derive proc macro, it's not particularly interesting. But it's
+important to note what it is actually doing for a given type `T`:
+
+- `visit_children`: for every field, if the type is a `Gc`, call `visitor` on `.opaque_gc`. If the type
+is _not_ a `Gc`, recursively call `visit_children` on it. 
+- `finalize`: for every field, if the type is _not_ a `Gc`, call `finalize` on it. 
+
+If you would like to see how it was done, the code is available [here](https://github.com/maplant/scheme-rs/blob/main/proc-macros/src/lib.rs).
+
+### Deallocation
+
+The `free` function needs to call [`std::alloc::dealloc`](https://doc.rust-lang.org/std/alloc/fn.dealloc.html) to 
+`free` the allocated memory. This function takes a [Layout](https://doc.rust-lang.org/std/alloc/struct.Layout.html),
+how do we find this for our opaque `dyn Trace` pointer? Turns out the memory and alignment of the underlying data 
+is part of Rust's vtable. So, we can just call `Layout::for_value` on our reference and create one. Here's the resulting
+free function:
+
+```rust
+unsafe fn trace<'a>(s: OpaqueGcPtr) -> &'a mut dyn Trace {
+    &mut *s.as_ref().data.get()
+}
+
+unsafe fn free(s: OpaqueGcPtr) {
+    // Safety: No need to acquire a permit, s is guaranteed to be garbage.
+    let trace = trace(s);
+    let layout = Layout::for_value(trace);
+    trace.finalize();
+    std::alloc::dealloc(s.as_ptr() as *mut u8, layout);
+}
+```
 
 [1] As outlined in (Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan)[https://dl.acm.org/doi/10.5555/646158.680003] (I found the contents of the paper [here](https://pages.cs.wisc.edu/~cymen/misc/interests/Bacon01Concurrent.pdf)).
