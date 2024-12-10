@@ -20,6 +20,7 @@ pub struct Article {
     title: String,
     filename: String,
     body: String,
+    preprint: bool,
 }
 
 impl Article {
@@ -30,6 +31,7 @@ impl Article {
         let Some(caps) = re.captures(filename) else {
             return Ok(None);
         };
+        let preprint = filename.contains("preprint");
         let year: i32 = caps["year"].parse()?;
         let month: u32 = caps["month"].parse()?;
         let day: u32 = caps["day"].parse()?;
@@ -45,6 +47,7 @@ impl Article {
             title,
             filename,
             body,
+            preprint,
         }))
     }
 
@@ -284,13 +287,15 @@ pub fn parse_codeblock<'a>(
     while let Some(next) = markdown_parser.next() {
         match next {
             Event::Text(text) => {
-                output.push(Event::Html(
+                output.push(Event::Html(if lang.is_empty() {
+                    format!(r#"<pre class="code">{text}</pre>"#).into()
+                } else {
                     format!(
                         r#"<pre class="code">{}</pre>"#,
                         parse_code_snippit(lang, &text).unwrap()
                     )
-                    .into(),
-                ));
+                    .into()
+                }));
             }
             Event::End(_) => break,
             _ => panic!(),
@@ -304,7 +309,7 @@ pub fn parse_markdown<'a>(markdown: &'a str) -> impl Iterator<Item = Event<'a>> 
 
     while let Some(next) = parser.next() {
         match next {
-            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(lang))) if !lang.is_empty() => {
+            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(lang))) => {
                 parse_codeblock(&lang, &mut parser, &mut output);
             }
             x => {
@@ -322,7 +327,12 @@ pub fn parse_markdown_to_html(markdown: &str) -> String {
     html_output
 }
 
-pub fn compile(projects_file: &str, employment_file: &str, articles_dir: &str, output_dir: &str) -> Result<()> {
+pub fn compile(
+    projects_file: &str,
+    employment_file: &str,
+    articles_dir: &str,
+    output_dir: &str,
+) -> Result<()> {
     let articles = Article::from_dir(articles_dir)?;
     for article in &articles {
         article.write(output_dir)?;
@@ -340,7 +350,7 @@ pub fn compile(projects_file: &str, employment_file: &str, articles_dir: &str, o
     let employment = EmploymentHistory::from_file(employment_file)?;
     let resume = Resume::new(employment, projects);
     resume.write(output_dir)?;
-    
+
     Ok(())
 }
 
