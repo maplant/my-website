@@ -9,8 +9,8 @@ askama = { version = "0.12", features = ["markdown"] }
 chrono = "0.4"
 lazy_static = "1"
 maplit = "1"
-pulldown-cmark = "0.9"
+pulldown-cmark = "0.12"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-syntect = "5"
+inkjet = "0.11"
 toml = "0.8"

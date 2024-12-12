@@ -1,17 +1,10 @@
 use anyhow::{anyhow, Result};
 use askama::Template;
 use chrono::{DateTime, NaiveDate, Utc};
-use lazy_static::lazy_static;
-use maplit::hashmap;
+use inkjet::{formatter, Highlighter, Language};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Tag};
 use regex::Regex;
-use std::{collections::HashMap, fs};
-use syntect::{
-    highlighting::ThemeSet,
-    html::{css_for_theme_with_class_style, ClassStyle, ClassedHTMLGenerator},
-    parsing::SyntaxSet,
-    util::LinesWithEndings,
-};
+use std::fs;
 
 #[derive(Template)]
 #[template(path = "article.html")]
@@ -208,16 +201,37 @@ pub struct Styles {
     light_theme: String,
 }
 
+fn theme_to_css(theme: inkjet::theme::Theme) -> String {
+    let mut css = String::new();
+
+    css.push_str(".code {\n");
+    css.push_str(&format!("color: {};\n", theme.fg.into_hex()));
+    css.push_str(&format!("background-color: {};\n", theme.bg.into_hex()));
+    css.push_str("}\n");
+
+    for (name, style) in theme.styles {
+        css.push_str(&format!(".{} {{\n", name));
+        if let Some(color) = style.fg {
+            css.push_str(&format!("color: {};\n", color.into_hex()));
+        }
+        if let Some(color) = style.bg {
+            css.push_str(&format!("background-color: {};\n", color.into_hex()));
+        }
+        css.push_str("}\n");
+    }
+
+    css
+}
+
 impl Styles {
     pub fn new() -> Result<Self> {
-        let ts = ThemeSet::load_defaults();
-        let dark_theme = &ts.themes["Solarized (dark)"];
-        let dark_theme = css_for_theme_with_class_style(dark_theme, ClassStyle::Spaced)?;
-        let light_theme = &ts.themes["Solarized (light)"];
-        let light_theme = css_for_theme_with_class_style(light_theme, ClassStyle::Spaced)?;
+        let dark_theme = inkjet::theme::Theme::from_helix(inkjet::theme::vendored::SOLARIZED_DARK)?;
+        let light_theme =
+            inkjet::theme::Theme::from_helix(inkjet::theme::vendored::SOLARIZED_LIGHT)?;
+
         Ok(Self {
-            dark_theme,
-            light_theme,
+            dark_theme: theme_to_css(dark_theme),
+            light_theme: theme_to_css(light_theme),
         })
     }
 
@@ -227,56 +241,10 @@ impl Styles {
     }
 }
 
-lazy_static! {
-    pub static ref LANGS: HashMap<&'static str, &'static str> = hashmap! {
-    "asp" => "ASP",
-    "html" => "HTML",
-    "batch" => "Batch File",
-    "c#" => "C#",
-    "c++" => "C++",
-    "c" => "C",
-    "css" => "CSS",
-    "clojure" => "Clojure",
-    "d" => "D",
-    "erlang" => "Erlang",
-    "go" => "Go",
-    "haskell" => "Haskell",
-    "java" => "Java",
-    "json" => "JSON",
-    "javascript" => "JavaScript",
-    "latex" => "LaTeX",
-    "lisp" => "Lisp",
-    "lua" => "Lua",
-    "makefile" => "Makefile",
-    "markdown" => "Markdown",
-    "ocaml" => "OCaml",
-    "objective-c" => "Objective-C",
-    "php" => "PHP",
-    "pascal" => "Pascal",
-    "perl" => "Perl",
-    "python" => "Python",
-    "r" => "R",
-    "ruby" => "Ruby",
-    "rust" => "Rust",
-    "sql" => "SQL",
-    "scala" => "Scala",
-    "bash" => "Bourne Again Shell (bash)",
-    "sh" => "Shell-Unix-Generic",
-    };
-}
-
 pub fn parse_code_snippit(lang: &str, code: &str) -> Result<String> {
-    let syntax_set = SyntaxSet::load_defaults_newlines();
-    let lang = LANGS.get(lang.to_lowercase().as_str()).unwrap();
-    let syntax = syntax_set
-        .find_syntax_by_name(lang)
-        .ok_or_else(|| anyhow!("Failed to find syntax definition for {lang}"))?;
-    let mut html_generator =
-        ClassedHTMLGenerator::new_with_class_style(syntax, &syntax_set, ClassStyle::Spaced);
-    for line in LinesWithEndings::from(code) {
-        html_generator.parse_html_for_line_which_includes_newline(line)?;
-    }
-    Ok(html_generator.finalize())
+    let language = Language::from_token(lang)
+        .ok_or_else(|| anyhow::anyhow!("No such language def: {lang}"))?;
+    Ok(Highlighter::new().highlight_to_string(language, &formatter::Html, code)?)
 }
 
 pub fn parse_codeblock<'a>(
