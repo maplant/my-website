@@ -696,7 +696,7 @@ If we wish to move our collection into a separate thread, we are somehow going t
 with two things:
 
 - Increment and Decrement operations can happen in parallel while our algorithm is running. In
-  the synchronous algorithm, we could guarantee that reference counts would stay throughout the 
+  the synchronous algorithm, we could guarantee that reference counts would stay the same for the
   lifetime of `CollectCycles`.
 - The mutation of the reference graph can causes the `MarkGray` function to incorrectly mark 
   a live object as garbage.
