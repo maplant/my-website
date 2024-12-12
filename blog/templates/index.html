@@ -27,9 +27,11 @@
   <div>
     <h3>Most recent articles:</h3>
     {% for article in articles %}
+    {% if !article.preprint %}
     <div style="margin-top: 10px" class="article">
       <a href="./{{article.filename}}">{{article.title}}</a> - published <span class="article-date">{{article.date|fmt_date}}</span>
     </div>
+    {% endif %}
     {% endfor %}
   </div>
   <div>
