@@ -37,7 +37,7 @@ a write lock can take a disproportionate amount of times. But, let's consider th
 with relatively few concurrent writes.
 
 In scheme, writes occur most often when adding a variable to a lexical environment, and by and large that happens synchronously. For
-example, the following snippit:
+example, the following snippet:
 
 ```scheme
 (define pi 3.1415)
@@ -336,10 +336,10 @@ That key problem is cycles.
 
 ### Cycles
 
-(fig1)
+<img src="./fig1.jpg" style="width: 300px" alt="A simple cyclic data structure consisting of two nodes: A and B, and two edges: AB and BA">
  
 An object can be unreachable but still have a positive reference count. This is because our `Gc` type allows for
-the creation of cylcic data structures (see fig1). Such data structures are pretty common to create, 
+the creation of cylcic data structures (see fig. 1). Such data structures are pretty common to create, 
 especially in functional languages like Scheme. In order to ensure that cyclical data structures are collected 
 appropriated, we will be implementing
 [Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan](https://dl.acm.org/doi/10.5555/646158.680003) [^6],
@@ -634,10 +634,10 @@ I am. I hope you at least have the courtesy to be less good looking. Anyway, thi
 correct with our current set of assumptions. And that's because of the implementation for
 Arc, which recurses into its data. 
 
-The problem is that we are basically disregarding the reference count of the `Arc`. consideer the
+The problem is that we are basically disregarding the reference count of the `Arc`. consider the
 following situation:
 
-(figure 3)
+<img src="./fig2.jpg" style="width: 300px" alt="A data structure with three nodes: A, B, C and Arc, with three edges: A->Arc, B->Arc, Arc->C">
 
 In this case, dropping A results in the immediate dropping of C while a dangling reference from B remains. 
 Essentially, the `Arc` collapses all of the incoming references to C into one. 
@@ -1020,7 +1020,7 @@ unsafe fn collect_white(s: OpaqueGcPtr) {
 Because of concurrent mutations to the edges of our graph, there is a possibility that our mark algorithm 
 will produce results that are incorrect. Therefore, we divide our collection algorithm into two phases:
 
-- The marking phase which produces candidate cycles 
+- The marking phase, which produces candidate cycles.
 - The _safety_ phase, which determines if candidate cycles are garbage.
 
 The correctness of this approach relies on another key insight: any mutation that occurs while we are
@@ -1208,6 +1208,8 @@ As a nice consequence of allowing `Arc` to be a data type, we can add a very sim
 our code. Let's be clear, this is an insufficient amount of testing! But it does demonstrate that
 we _do_ have the ability to test our code:
 
+<img src="./fig3.jpg" style="width: 300px" alt="A data structure with three nodes: A, B, C and Arc, with four edges: A->B, B->C, B->Arc, C->A">
+
 ```rust
 #[cfg(test)]
 mod test {
@@ -1261,7 +1263,7 @@ mod test {
 [^3]: Now, if we were able to construct a `Gc` manually, i.e. by manually instanciating its fields with a copied 
       [`NonNull`](https://doc.rust-lang.org/std/ptr/struct.NonNull.html#impl-Copy-for-NonNull%3CT%3E),
       our invariant would not hold. But Gc's field is private, and thus we can be assured that a `Gc` can only be 
-      created by user code via the `new` - which instanciates a new `Gc` with a ref count of one - or `clone` 
+      created by user code via the `new` - which instantiates a new `Gc` with a ref count of one - or `clone` 
       functions - which increment the reference count. Since `drop` only runs when a variable is [no longer live](https://en.wikipedia.org/wiki/Safety_and_liveness_properties), we know that it corresponds to a decrement in the ref count. Drop is not 
       _guaranteed_ to be invoked for an object, a user could call [`forget`](https://doc.rust-lang.org/std/mem/fn.forget.html) 
       with the object and its destructor will not be run. But practically speaking, the destructor for an object 
