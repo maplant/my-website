@@ -1257,7 +1257,7 @@ For example, x<sub>1</sub> allocations occurred at time t<sub>1</sub>, x<sub>2</
 occurred at time t<sub>2</sub>, t<sub>1</sub> <  t<sub>2</sub> and  x<sub>1</sub> > x<sub>2</sub>
 so the garbage collector did some work over t<sub>2</sub> -  t<sub>1</sub>. 
 
-Because we are building a our garbage collector on top of a system that already supports reference
+Because we are building our garbage collector on top of a system that already supports reference
 counted smart pointers, we can use an `Arc` to analyse the operation of our collection algorithms.
 By analyzing the strong reference count of an `Arc` embedded in a garbage cyclical data structure,
 we can determine that our cycle was properly destroyed if the strong reference count for the `Arc`
@@ -1267,7 +1267,7 @@ We could also do this with our own `Gc` type, but as we have established only on
 read the reference count. Therefore, if we want to adapt our unit tests to include the collector
 running in parallel, we cannot use them. 
 
-This is a pretty nice consequence of allowing `Arc` to be a data type, we can add a very simple unit
+This is a pretty nice consequence of allowing `Arc` in our `Gc<T>`s, we can add a very simple unit
 test to our code. It is insufficient amount of testing, but this article is already quite long, so
 I will leave the rest up to you dear reader.
 
