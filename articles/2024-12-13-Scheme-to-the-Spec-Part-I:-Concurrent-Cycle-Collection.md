@@ -1,8 +1,6 @@
-# Scheme to the Spec (In Rust)
+# Scheme to the Spec (in Async Rust)
 
-**This is a pre-print article**
-
-Scheme to the Spec is a series on the more complex, often overlooked (at least didactically) aspects of programming language 
+Scheme to the Spec is a series on the more complex, often overlooked aspects of programming language 
 implementation.
 
 In this series we will dive deep into my work-in-progress implementation of R6RS scheme, [scheme-rs](https://www.github.com/maplant/scheme-rs),
@@ -12,10 +10,10 @@ Our first article discusses how to implement Garbage-Collected smart pointers th
 and the interfacing Rust code. In later articles we will discuss topics such as tail call optimizations, implementing continuations, 
 and syntax transformers. Our final article will be implementing [on-stack replacement](https://www.graalvm.org/latest/graalvm-as-a-platform/language-implementation-framework/OnStackReplacement/) with LLVM.
 
-## Part I: Garbage Collected Smart Pointers with Concurrent Cycle Collection
+## Part I: Garbage Collected Smart Pointers via Concurrent Cycle Collection
 
 Ten years ago I wrote an article on how to implement a conservative garbage collector for C, and I got a lot of constructive 
-criticism regarding the actual usefulness of the code presented. It only makes sense that on the ten-year anniversary 
+criticism regarding the actual usefulness of the code presented. It only makes sense that on the ten-year anniversary of
 publishing I should try to fix my error by writing a garbage collector that is precise, does not make assumptions, and (hopefully) 
 actually works.
 
@@ -40,7 +38,7 @@ actually works.
          2. [Δ-test](#delta-test)
       4. [Cleaning up](#cleaning-up)
       5. [Misc helper functions](#misc-helper-functions)
-  6. [Bringing it all together](#bringing-it-all-together)
+   6. [Bringing it all together](#bringing-it-all-together)
 4. [Testing](#testing)
 5. [Footnotes](#footnotes)
 
@@ -58,25 +56,25 @@ I want the `Gc<T>` type to work as follows:
 
 Why a `RwLock` and not a `Mutex`? `RwLocks` are not always ideal as a lock, so we need a particularly good justification for
 choosing them. Since read and write locks are given access in a FIFO queue and neither has a higher priority than the other, acquiring 
-a write lock can take a disproportionate amount of times. But, let's consider the language we are implementing: a functional language
+a write lock can take a disproportionate amount of time. But, let's consider the language we are implementing: a functional language
 with relatively few concurrent writes.
 
-In scheme, writes occur most often when adding a variable to a lexical environment, and by and large that happens synchronously. For
-example, the following snippet:
+In Scheme, writes occur most often when adding a variable to a lexical environment, and by and large that happens synchronously. For
+example, in the following snippet
 
 ```scheme
 (define pi 3.1415)
 (define e  2.7182)
 ```
 
-Write locks are acquired on the environment sequentially, and thus the process does not need to await.
+write locks are acquired on the environment sequentially, and thus the process does not need to wait.
 
 `RwLocks` would be a poor choice for Scheme code with multiple threads all reading and writing to a global variable. This pattern is
-just not very common in functional programming, where message passing is vastly preferred. 
+just not very common in functional programming where message passing is vastly preferred. 
 
 Now that we have an idea as to how our smart pointer should behave, we can begin our implementation. 
 
-### 1.1 Scaffolding and allocation <a name="scaffolding-and-allocation"></a>
+### 1.1. Scaffolding and allocation <a name="scaffolding-and-allocation"></a>
 
 Our Gc type will be composed of three separate types:
 
@@ -84,13 +82,13 @@ Our Gc type will be composed of three separate types:
 - `GcInner<T>`: The inner data type, which contains `T` and any other information we may need to keep track of our data.
 - `GcHeader`: Internal book-keeping information.
 
-To begin, we have no extra information we need to store in `GcHeader`, so we can knock that one out quickly:
+To begin, we have no extra information we need to store in `GcHeader`, so we can knock it out quickly:
 
 ```rust
 struct GcHeader;
 ```
 
-`GcInner<T>` is just the header and the data, so that is equally simple:
+`GcInner<T>` is just the header and the data, so it is equally simple:
 
 ```rust
 struct GcInner<T> {
@@ -110,10 +108,10 @@ struct Gc<T> {
 Unfortunately, this definition has two major problems:
 
 
-#### 1.1.1 Variance <a name="variance"></a>
+#### 1.1.1. Variance <a name="variance"></a>
 
 This struct does not pass through subtyping relationships on T; i.e., this structure is _invariant_ over T.
-Ideally, for every two type parameters `A` and `B`, if `A` is a subtype of `B` we'd also like `Gc<A>` to
+Ideally, for every two type parameters `A` and `B`, if `A` is a subtype of `B` we would also like `Gc<A>` to
 be a subtype of `Gc<B>` because we want a `Gc<T>` to behave as close to a `T` as possible. The reason this 
 occurs is because pointer types in Rust are _invariant_, and thus our wrapper type will be as well.
 
@@ -122,9 +120,9 @@ ensures that any Gc we successfully create will _never_ contain a null pointer, 
 
 In reality, variance is not particularly useful for our struct since we only support types that are `'static`,
 and most subtyping relationships in Rust regard references. However, there are a few times when it may come up [^1], 
-so there's no reason to not support it. 
+so there is no reason to not support it. 
 
-#### 1.1.2 Drop checking <a name="drop-checking"></a>
+#### 1.1.2. Drop checking <a name="drop-checking"></a>
 
 As it's specified now, the Rust compiler is forced to assume that any `Gc<T>` will be strictly out-lived by the 
 underlying data. For our data type this not the case. Although a lot of `Gc`s represent references to data, 
@@ -191,9 +189,10 @@ This sets up our `Gc<T>` type to have thread-safe interior mutability. We must n
 
 ### 2.1. Semaphores <a name="semaphores"></a> 
 
-A Semaphore is a way to control access to a resource. Essentially, it is an array of N slots that each process
-is allowed to claim ownership of. If all N slots are claimed, then processes must queue up and wait for
-the processes with ownership to relinquish them.
+A [Semaphore](https://en.wikipedia.org/wiki/Semaphore_(programming)) is a way to control access to a
+resource. Essentially, it is an array of N slots that each process is allowed to claim ownership of.
+If all N slots are claimed, then processes must queue up and wait for the processes with ownership 
+to relinquish them.
 
 ```
 Acquire(Semaphore&lt;N&gt;) -> Option&lt;Permit&gt;
@@ -211,21 +210,21 @@ Lock(Semaphore) -> Permit:
             Some(Permit) => return Permit,
 ```
 
-If we were to change our semaphore have N > 1 slots, we need to add another atomic operation in order to properly
+If we were to change our semaphore to have N > 1 slots, we need to add another atomic operation in order to properly
 mimic our `Mutex`:
 
 ```
-AcquireN(Semaphore, NumSlots) -> Option&lt;Permit&gt;`
+AcquireMany(Semaphore<N>, NumSlots) -> Option&lt;Permit&gt;
 ```
 
-Locking is pretty much the same, but instead of attempting to acquire one slot, we attempt to acquire all N.
+Locking is pretty much the same but instead of attempting to acquire one slot we attempt to acquire all N.
 
-But we don't have to always lock a variable. We can use semaphores with N > 1 to mimic Rust's safety rules 
-- we can have an unlimited number of immutable references OR one single mutable reference, and never
-both. The trick is to have our reads only acquire one slot and to have our writes acquire all N. 
+We don't have to always lock a variable. We can use semaphores with N > 1 to mimic Rust's safety rules - we can 
+have an unlimited number of immutable references OR one single mutable reference, and never both. The trick is
+to have our reads only acquire one slot and to have our writes acquire all N. 
 
 To implement this, we're going to use [tokio's Semaphore](https://docs.rs/tokio/latest/tokio/sync/struct.Semaphore.html),
-which interfaces well async rust. Let's add it to `GcHeader`:
+which interfaces well with async rust. Let's add it to `GcHeader`:
 
 ```rust
 struct GcHeader {
@@ -239,9 +238,9 @@ We need some types to represent our acquired resources. In Rust, this done with 
 structs that:
 
 - hold a reference and a permit of use for a resource 
-- are treated transparently as a reference to the resource (via Deref and/or DerefMut)
+- are treated transparently as a reference to the resource (via [`Deref`](https://doc.rust-lang.org/std/ops/trait.Deref.html) and/or [`DerefMut`](https://doc.rust-lang.org/std/ops/trait.DerefMut.html))
 - release the permit when they are dropped
-- has the lifetime of the wrapper type (so cannot be returned from a function with the wrapper as a local)
+- has the lifetime of the struct used to create the guard (so cannot be returned from a function with the smart pointer as a local)
 
 ```rust 
 pub struct GcReadGuard<'a, T: ?Sized> {
@@ -294,7 +293,7 @@ unsafe impl<T: ?Sized + Sync> Sync for GcWriteGuard<'_, T> {}
 Again, you will notice that in both of these structs we use the same trick to ensure the desired variance 
 (covariance) over each of the guards type parameters.
 
-Since we use the tokio semaphore, we can create futures that await the acquisition of the permit:
+Since we use the tokio semaphore, we can create futures that await the acquisition of a permit:
 
 ```rust
 impl<T> Gc<T> {
@@ -345,34 +344,33 @@ take as input:
 
 - Tracing algorithms require a set of roots; values that one is required to travese in order to reach heap
   objects. This includes stack variables and globals.
-- Reference counting algorithms require the number of active reference counts to an object.
+- Reference counting algorithms require the number of active references to an object.
 
 Determining an object's reference count in Rust is fairly straightforward. In Rust, an object's reference count is equal to 
-the difference of clones and drops plus one. This is because Rust has an [affine type system](https://en.wikipedia.org/wiki/Substructural_type_system#Affine_type_systems) for objects that do not implement `Copy`, which means that an object that does not implement `Copy` can be moved 
-at _most_ once. Therefore, moves do not affect the reference count of an object. [^3]
+the difference of clones and drops plus one[^3]. This is because Rust has an [affine type system](https://en.wikipedia.org/wiki/Substructural_type_system#Affine_type_systems) for objects that do not implement `Copy`, which means that an object that does not implement `Copy` can be moved 
+at _most_ once. Therefore, moves do not affect the reference count of an object. [^4]
 
-To contrast this, figuring out the root objects in Rust is difficult. It's certainly possible[^4], but references counts are 
+To contrast this, figuring out the root objects in Rust is difficult. It's certainly possible[^5], but reference counts are 
 much easier to work with. This is why Rust's default automatic memory management types, [Rc](https://doc.rust-lang.org/std/rc/struct.Rc.html)
 and [Arc](https://doc.rust-lang.org/std/sync/struct.Arc.html), are both reference counted and can be easily implemented in user
 code. Therefore, we will use reference counting.
 
-But reference counting has a key problem. After all, if it didn't we would have no reason to implement our own type. 
-That key problem is cycles.
+But reference counting has a key problem. If it didn't we wouldn't have a reason to implement our own type.
 
 ### 3.1. Cycles <a name="cycles"></a> 
 
 <img src="./fig1.jpg" style="width: 300px" alt="A simple cyclic data structure consisting of two nodes: A and B, and two edges: AB and BA">
  
 An object can be unreachable but still have a positive reference count. This is because our `Gc` type allows for
-the creation of cylcic data structures (see fig. 1). Such data structures are pretty common to create, 
-especially in functional languages like Scheme. In order to ensure that cyclical data structures are collected 
-appropriated, we will be implementing
-[Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan](https://dl.acm.org/doi/10.5555/646158.680003) [^6],
+the creation of cyclical data structures (see fig. 1). Such data structures are pretty common to, especially in functional languages like Scheme. In order to ensure that cyclical data structures are collected 
+appropriately, we will be implementing
+[Concurrent Cycle Collection in Reference Counted Systems by David F. Bacon and V.T. Rajan](https://dl.acm.org/doi/10.5555/646158.680003) [^7],
 an algorithm for automatically detecting and collecting cycles in reference counted data structures. 
 
 ### 3.2. Synchronous cycle collection <a name="synchronous-cycle-collection"></a> 
 
-Here is the code listing for the synchronous cycle collection algorithm:
+Before we implement concurrent cycle detection, let's start with synchronous. Here is the code
+listing for the synchronous cycle collection algorithm:
 
 <table style="border: 0px">
   <tr>
@@ -510,7 +508,8 @@ CollectWhite(S)
 </tr>
 </table>
 
-Everyone loves code and we can trust it just fine, but how does this actually work?
+Everyone loves to trust code at face value, but how does this actually work? I encourage you to read the paper, but I
+will summarize the operation leaving out some very important details.
 
 Cycle Collection relies on this key insight: if you were to perform a drop on every node in a cycle, that cycle will be 
 garbage if the remaining ref count of every node in that cycle is zero. This kind of makes sense intuitively, what we're 
@@ -532,7 +531,7 @@ structure is marked white, to indicate it is ready to be freed.
 - `Collect`: Go through the roots marked white and free them. 
 
 
-There is one thing in particular that is not immediately clear as to how we are going to implement this. How do 
+There is one thing in particular that is not immediately clear as to how we are going to implement. How do 
 we iterate over the children? We haven't put any bounds on the `T` in our `Gc<T>` beyond that it has to be `'static`. Well,
 until Rust gains a more powerful reflection story, we are going to have to add a classic Trait plus derive macro combo.
 
@@ -580,7 +579,7 @@ impl<T: Trace> Gc<T> {
 ``` 
 
 With the Trace trait defined, we can implement it for some primitive types to give us some building blocks with which
-to implement composite structures. A good starting point will be Rust's std library, since those datastructures are used
+to implement composite structures. A good starting point will be Rust's std library, since those data structures are used
 throughout the entire Rust ecosystem. I won't provide all of the ones I implemented, but here 
 are a few:
 
@@ -656,11 +655,11 @@ where
 
 If you are able to immediately spot the error in the code above, you are much smarter than
 I am. I hope you at least have the courtesy to be less good looking. Anyway, this code isn't
-correct with our current set of assumptions. And that's because of the implementation for
-Arc, which recurses into its data. 
+correct with our current set of assumptions. And that's due to the implementation for Arc,
+which recurses into its data. 
 
-The problem is that we are basically disregarding the reference count of the `Arc`. consider the
-following situation:
+The problem is that we are basically disregarding the reference count of the `Arc`. Consider the
+following structure:
 
 <img src="./fig2.jpg" style="width: 300px" alt="A data structure with three nodes: A, B, C and Arc, with three edges: A->Arc, B->Arc, Arc->C">
 
@@ -668,7 +667,7 @@ In this case, dropping A results in the immediate dropping of C while a dangling
 Essentially, the `Arc` collapses all of the incoming references to C into one. 
 
 Here is the correct code for `Arc`. Part of what makes this code correct is that we added an 
-explanation, so make sure to always do that. 
+explanation, so be sure to always do that. 
 
 ```rust
 unsafe impl<T> Trace for std::sync::Arc<T>
@@ -684,22 +683,42 @@ where
 }
 ```
 
-I am not going to get too into the Trait derive proc macro, it's not particularly interesting. But it's
-important to note what it is actually doing for any given type `T`:
+Another important thing to discuss is the operation of `finalize` for `Vec` (and other container types):
+
+```rust
+unsafe impl<T> Trace for Vec<T>
+where
+    T: GcOrTrace,
+{
+    unsafe fn finalize(&mut self) {
+        for mut child in std::mem::take(self).into_iter() {
+            child.finalize_or_skip();
+            std::mem::forget(child);
+        }
+    }
+}
+```
+
+Our finalization here is pretty particular: we _take_ the memory allocated by the `Vec`, convert it into 
+and owned iterator so we can be sure there are no dangling references to child that `drop` may be run on,
+and drop the children.
+
+I am not going to get too into the Trait derive proc macro code as it's not particularly interesting and 
+quite long. But it's important to note what it is actually doing for any given type `T`:
 
 - `visit_children`: for every field, if the type is a `Gc`, call `visitor` on the `OpaqueGcPtr` of the field.
 If the type is _not_ a `Gc`, recursively call `visit_children` on it. 
 - `finalize`: for every field that is _not_ a `Gc`, call `finalize` on it. 
 
-If you would like to see how it was done, the code is available [here](https://github.com/maplant/scheme-rs/blob/main/proc-macros/src/lib.rs).
+If you would like to see how this is done, the code is available [here](https://github.com/maplant/scheme-rs/blob/main/proc-macros/src/lib.rs).
 
 ### 3.4. Deallocation <a name="deallocation"></a> 
 
 The `free` function needs to call [`std::alloc::dealloc`](https://doc.rust-lang.org/std/alloc/fn.dealloc.html) to 
-`free` the allocated memory. This function takes a [Layout](https://doc.rust-lang.org/std/alloc/struct.Layout.html),
-how do we find this for our opaque `dyn Trace` pointer? Turns out the memory and alignment of the underlying data 
-is part of Rust's vtable. So, we can just call `Layout::for_value` on our reference and create one. Here's the resulting
-free function:
+`free` the allocated memory. This function takes a [Layout](https://doc.rust-lang.org/std/alloc/struct.Layout.html) (a size
+and alignment). How do we find this for our opaque `dyn Trace` pointer? Turns out the size and alignment of the
+underlying data is part of Rust's vtable. So, we can just call `Layout::for_value` on our reference and create one. 
+Here's the resulting free function:
 
 ```rust
 unsafe fn trace<'a>(s: OpaqueGcPtr) -> &'a mut dyn Trace {
@@ -752,19 +771,23 @@ enum Color {
     Orange,
 }
 ```
-  
+
+This header is quite large and therefore a lot of overhead. It can be made smaller with some tricks, 
+such as assuming that most nodes will not have more than 255 reference counts and storing overflowing
+ref counts externally, but we will ignore those tricks for now.
+
 #### 3.5.1. The mutation buffer <a name="the-mutation-buffer"></a> 
 
 You will notice that the ref counts for our `Gc` type are _not_ atomic. This is because our concurrent 
 algorithm requires a constraint: only one thread at a time can _ever_ modify the ref count, or indeed
-_any_ field in the `GcHeader`. This gives our garbage collection process exclusive read and write 
-access to the header. 
+_any_ field in the `GcHeader` except for semaphore (which is already thread safe). This gives our
+garbage collection process exclusive read and write access to most of the header. 
 
 What gives? How does _that_ work? Isn't this algorithm supposed to be concurrent? We don't want
 decrementing or incrementing ref counts to wait on the completion of the GC process. That would make
 our drop and clone functions blocking, which would gum up our whole system.
 
-The solution is the mutation buffer, and unbounded channel that let's us buffer incremements and 
+The solution is the mutation buffer, an unbounded channel that lets us buffer incremements and 
 decrements to be handled by our collection process as it pleases.
 
 This wil allow our collector to stop processing incremements and decrements at any time and effectively
@@ -815,7 +838,6 @@ impl Default for MutationBuffer {
 static MUTATION_BUFFER: OnceLock<MutationBuffer> = OnceLock::new();
 
 fn inc_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
-    // SAFETY: send takes an immutable reference and is atomic
     MUTATION_BUFFER
         .get_or_init(MutationBuffer::default)
         .mutation_buffer_tx
@@ -824,7 +846,6 @@ fn inc_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
 }
 
 fn dec_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
-    // SAFETY: send takes an immutable reference and is atomic
     MUTATION_BUFFER
         .get_or_init(MutationBuffer::default)
         .mutation_buffer_tx
@@ -853,7 +874,7 @@ impl<T: Trace> Drop for Gc<T> {
 }
 ```
 
-This also presents a structure for our collection process: wait for some number of increments and 
+This also presents a structure for our collection process: wait for some increments and 
 decrements, process them, then decide if we want to try to perform a collection:
 
 
@@ -922,7 +943,7 @@ async unsafe fn process_mutation_buffer(
 You will notice in the `GcHeader` we added a second reference counting field called the CRC. This is distinguished
 from the "true" reference count, the RC, by being the hypothetical reference count of the node that has perhaps 
 become invalidated during the epoch. We can modify the code listing to create the following functions that use the CRC
-instead [^7]:
+instead [^8]:
 
 ```rust
 // SAFETY: These values can only be accessed by one thread at once.
@@ -1049,13 +1070,10 @@ will produce results that are incorrect. Therefore, we divide our collection alg
 - The _safety_ phase, which determines if candidate cycles are garbage.
 
 The correctness of this approach relies on another key insight: any mutation that occurs while we are
-marking our cycles _must_ appear in the next epoch. Therefore, there are two things we need to check for 
-in any potential cycles:
+marking our cycles _must_ appear in the next epoch. Therefore, we need to check that no external node adds
+an edge to our potential cycle over the current and next epoch.
 
-- No live node adds references to our potential cycle in the next epoch
-- No node increments their reference count in the next epoch
-
-We have two tests for this:
+We have two tests for this, corresponding to the current and next epoch respectively:
 
 ##### 3.5.3.1. Σ-test <a name="sigma-test"></a> 
 
@@ -1083,8 +1101,9 @@ unsafe fn sigma_preparation() {
 }
 ```
 
-Once we have established this, after we process the next epoch if any of the circular reference counts
-in the cycle are greater than zero, the graph is live:
+At the end of prepartion, if any of the circular reference counts are greater than zero, the graph is live.
+We check this in the next epoch:
+
 
 ```rust
 unsafe fn sigma_test(c: &[OpaqueGcPtr]) -> bool {
@@ -1119,7 +1138,7 @@ unsafe fn delta_test(c: &[OpaqueGcPtr]) -> bool {
 #### 3.5.4. Cleaning up <a name="cleaning-up"></a> 
 
 If a candidate cycle fails either of the tests, we want to make sure to properly re-color the nodes.
-There's an additional heuristic that adds some nodes back to the root.
+There's an additional heuristic that adds some nodes back to the roots list.
 
 ```rust
 unsafe fn refurbish(c: &[OpaqueGcPtr]) {
@@ -1206,8 +1225,12 @@ unsafe fn for_each_child(s: OpaqueGcPtr, visitor: unsafe fn(OpaqueGcPtr)) {
 ```
 
 These are all pretty straightforward, but you may notice that we acquire a read lock on
-the data for the `Gc` when we call `for_each_child`. (I believe) the paper doesn't mention 
-it, but it has the assumption that pointer store and loads are atomic. 
+the data for the `Gc` when we call `for_each_child`. I couldn't find any mention of it in the
+paper but it has the assumption that pointer store and loads are atomic. 
+
+The way this is implemented is not ideal as the permit is acquired for the lifetime of the
+`visit_children` function. A better approach would be to collect all of the `OpaqueGcPtr`s into
+a buffer and traverse them after releasing the permit.
 
 ### 3.6. Bringing it all together <a name="bringing-it-all-together"></a> 
 
@@ -1229,11 +1252,30 @@ unsafe fn collect_cycles() {
 
 ## 4. Testing <a name="testing"></a> 
 
-As a nice consequence of allowing `Arc` to be a data type, we can add a very simple unit test of
-our code. Let's be clear, this is an insufficient amount of testing! But it does demonstrate that
-we _do_ have the ability to test our code:
+Garbage Collection is very hard to properly test. Often times testing is done via metrics:
+For example, x<sub>1</sub> allocations occurred at time t<sub>1</sub>, x<sub>2</sub> allocations
+occurred at time t<sub>2</sub>, t<sub>1</sub> <  t<sub>2</sub> and  x<sub>1</sub> > x<sub>2</sub>
+so the garbage collector did some work over t<sub>2</sub> -  t<sub>1</sub>. 
+
+Because we are building a our garbage collector on top of a system that already supports reference
+counted smart pointers, we can use an `Arc` to analyse the operation of our collection algorithms.
+By analyzing the strong reference count of an `Arc` embedded in a garbage cyclical data structure,
+we can determine that our cycle was properly destroyed if the strong reference count for the `Arc`
+decreases. 
+
+We could also do this with our own `Gc` type, but as we have established only one thread can ever
+read the reference count. Therefore, if we want to adapt our unit tests to include the collector
+running in parallel, we cannot use them. 
+
+This is a pretty nice consequence of allowing `Arc` to be a data type, we can add a very simple unit
+test to our code. It is insufficient amount of testing, but this article is already quite long, so
+I will leave the rest up to you dear reader.
+
+Consider the following structure:
 
 <img src="./fig3.jpg" style="width: 300px" alt="A data structure with three nodes: A, B, C and Arc, with four edges: A->B, B->C, B->Arc, C->A">
+
+The following unit test replicates it:
 
 ```rust
 #[cfg(test)]
@@ -1283,9 +1325,14 @@ mod test {
 
 ## Footnotes <a name="footnotes"></a>
 
-[^1]: One example of where this might come up is that `Gc<dyn FnMut(&'static T)>` is a subtype of `for<'a> Gc<dyn FnMut(&'a T)>`.
-[^2]: See [https://rustc-dev-guide.rust-lang.org/borrow_check/drop_check.html#dropck_outlives] for more information.
-[^3]: Now, if we were able to construct a `Gc` manually, i.e. by manually instanciating its fields with a copied 
+[^1]: 
+One example of where this might come up is that `Gc<dyn FnMut(&'static T)>` is a subtype of `for<'a> Gc<dyn FnMut(&'a T)>`.
+[^2]:
+See [here](https://rustc-dev-guide.rust-lang.org/borrow_check/drop_check.html#dropck_outlives) for more information.
+[^3]:
+More accurately, the reference count is one plus the difference between any call to a function of the form fn(&Gc) -> Gc such 
+      as the returned Gc has a copy of the pointer in the argument. 
+[^4]: Now, if we were able to construct a `Gc` manually, i.e. by manually instanciating its fields with a copied 
       [`NonNull`](https://doc.rust-lang.org/std/ptr/struct.NonNull.html#impl-Copy-for-NonNull%3CT%3E),
       our invariant would not hold. But Gc's field is private, and thus we can be assured that a `Gc` can only be 
       created by user code via the `new` - which instantiates a new `Gc` with a ref count of one - or `clone` 
@@ -1293,10 +1340,14 @@ mod test {
       _guaranteed_ to be invoked for an object, a user could call [`forget`](https://doc.rust-lang.org/std/mem/fn.forget.html) 
       with the object and its destructor will not be run. But practically speaking, the destructor for an object 
       is pretty much always going to be run.
-[^4]: See https://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/ and https://github.com/Manishearth/rust-gc]
-[^5]: But even if they _weren't_, since they _are_, a correct to the spec implementation of Scheme _must_ be able to 
+[^5]:
+See [here](https://manishearth.github.io/blog/2015/09/01/designing-a-gc-in-rust/) and [here](https://github.com/Manishearth/rust-gc)
+[^6]: 
+But even if they _weren't_, since they _are_, a correct to the spec implementation of Scheme _must_ be able to 
      recognize such cyclical data structures and garbage collect them when appropriate.
-[^6]: I found a link to the paper here [https://pages.cs.wisc.edu/~cymen/misc/interests/Bacon01Concurrent.pdf]
-[^7]: You may find that some of these functions are different than how they are described in the paper. I found a bug
+[^7]: 
+I found a link to the paper [here](https://pages.cs.wisc.edu/~cymen/misc/interests/Bacon01Concurrent.pdf)
+[^8]: 
+You may find that some of these functions are different than how they are described in the paper. I found a bug
      in the `MarkGray` function, which didn't properly decrement every node like the sync algorithm does. Similarly,
-     the Scan algorithm incorrectly groups the if statements.
+     the `Scan` algorithm incorrectly groups the if statements.
