@@ -1253,8 +1253,8 @@ unsafe fn collect_cycles() {
 ## 4. Testing <a name="testing"></a> 
 
 Garbage Collection is very hard to properly test. Often times testing is done via metrics:
-For example, x<sub>1</sub> allocations occurred at time t<sub>1</sub>, x<sub>2</sub> allocations
-occurred at time t<sub>2</sub>, t<sub>1</sub> <  t<sub>2</sub> and  x<sub>1</sub> > x<sub>2</sub>
+For example, there were x<sub>1</sub> allocations time t<sub>1</sub>, there were x<sub>2</sub> allocations
+ at time t<sub>2</sub>, t<sub>1</sub> <  t<sub>2</sub> and x<sub>1</sub> > x<sub>2</sub>
 so the garbage collector did some work over t<sub>2</sub> -  t<sub>1</sub>. 
 
 Because we are building our garbage collector on top of a system that already supports reference
