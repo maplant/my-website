@@ -619,9 +619,8 @@ where
     }
 
     unsafe fn finalize(&mut self) {
-        for mut child in std::mem::take(self).into_iter() {
+        for mut child in std::mem::take(self).into_iter().map(ManuallyDrop::new) {
             child.finalize_or_skip();
-            std::mem::forget(child);
         }
     }
 }
@@ -691,9 +690,8 @@ where
     T: GcOrTrace,
 {
     unsafe fn finalize(&mut self) {
-        for mut child in std::mem::take(self).into_iter() {
+        for mut child in std::mem::take(self).into_iter().map(ManuallyDrop::new) {
             child.finalize_or_skip();
-            std::mem::forget(child);
         }
     }
 }
@@ -701,7 +699,8 @@ where
 
 Our finalization here is pretty particular: we _take_ the memory allocated by the `Vec`, convert it into 
 and owned iterator so we can be sure there are no dangling references to child that `drop` may be run on,
-and drop the children.
+and drop the children _manually_. The child is moved into a `ManuallyDrop` so that if a panic occurrs
+within the finalization its destructor will not be run on unwind.
 
 I am not going to get too into the Trait derive proc macro code as it's not particularly interesting and 
 quite long. But it's important to note what it is actually doing for any given type `T`:
@@ -896,19 +895,30 @@ async unsafe fn run_garbage_collector() {
         .get_or_init(MutationBuffer::default)
         .mutation_buffer_rx
         .lock()
+        .unwrap()
         .take()
         .unwrap();
     let mut mutation_buffer: Vec<_> = Vec::with_capacity(MUTATIONS_BUFFER_DEFAULT_CAP);
     loop {
-        epoch(&mut last_epoch, &mut mutation_buffer).await;
+        epoch(
+            &mut last_epoch, 
+            &mut mutation_buffer_rx,
+            &mut mutation_buffer
+        ).await;
         mutation_buffer.clear();
     }
 }
 
-async unsafe fn epoch(last_epoch: &mut Instant, mutation_buffer: &mut Vec<Mutation>) {
-    process_mutation_buffer(mutation_buffer).await;
+async unsafe fn epoch(
+    last_epoch: &mut Instant, 
+    mutation_buffer_rx: &mut Vec<Mutation>,
+    mutation_buffer: &mut Vec<Mutation>
+) {
+    process_mutation_buffer(mutation_buffer_rx, mutation_buffer).await;
     let duration_since_last_epoch = Instant::now() - *last_epoch;
     if duration_since_last_epoch > Duration::from_millis(100) {
+        // This could be cancelled at shutdown, proper code should exit
+        // if awaiting the task yields an error.
         tokio::task::spawn_blocking(|| unsafe { process_cycles() })
             .await
             .unwrap();
@@ -1310,7 +1320,16 @@ mod test {
         drop(a);
         drop(b);
         drop(c);
+
+        let mut mutation_buffer_rx = MUTATION_BUFFER
+            .get_or_init(MutationBuffer::default)
+            .mutation_buffer_rx
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap();
         let mut mutation_buffer = Vec::new();
+
         unsafe {
             process_mutation_buffer(&mut mutation_buffer).await;
             process_cycles();
