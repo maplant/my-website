@@ -257,12 +257,6 @@ impl<T: ?Sized> Deref for GcReadGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> AsRef<T> for GcReadGuard<'_, T> {
-    fn as_ref(&self) -> &T {
-        self
-    }
-}
-
 unsafe impl<T: ?Sized + Send> Send for GcReadGuard<'_, T> {}
 unsafe impl<T: ?Sized + Sync> Sync for GcReadGuard<'_, T> {}
 
@@ -837,19 +831,21 @@ impl Default for MutationBuffer {
 static MUTATION_BUFFER: OnceLock<MutationBuffer> = OnceLock::new();
 
 fn inc_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
-    MUTATION_BUFFER
+    // Disregard any send errors. If the receiver was dropped then the process
+    // is exiting and we don't care if we leak.
+    let _ = MUTATION_BUFFER
         .get_or_init(MutationBuffer::default)
         .mutation_buffer_tx
-        .send(Mutation::new(MutationKind::Inc, gc as NonNull<OpaqueGc>))
-        .unwrap();
+        .send(Mutation::new(MutationKind::Inc, gc as NonNull<OpaqueGc>));
 }
 
 fn dec_rc<T: Trace>(gc: NonNull<GcInner<T>>) {
-    MUTATION_BUFFER
+    // Disregard any send errors. If the receiver was dropped then the process
+    // is exiting and we don't care if we leak.
+    let _ = MUTATION_BUFFER
         .get_or_init(MutationBuffer::default)
         .mutation_buffer_tx
-        .send(Mutation::new(MutationKind::Dec, gc as NonNull<OpaqueGc>))
-        .unwrap();
+        .send(Mutation::new(MutationKind::Dec, gc as NonNull<OpaqueGc>));
 }
 ```
 
