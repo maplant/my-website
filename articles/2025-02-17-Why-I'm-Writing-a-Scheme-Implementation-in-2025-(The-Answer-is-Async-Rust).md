@@ -31,8 +31,8 @@ As an aside, R6RS happens to have the best macro system of any programming langu
 Macros are hygienic by default but let you selectively break free from hygiene in a 
 remarkably clean way. Additionally, the homoiconic nature and ease of dealing with 
 s-expressions means you rarely have to do any complicated parsing or deal with ASTs. While
-`scheme-rs` is very much still a WIP, it implements R6RS perfectly, including all of the
-necessary hygiene conditions and ways to bend them, including `syntax-case` and 
+`scheme-rs` is very much still a WIP, it implements R6RS macros nearly perfectly, including 
+all of the necessary hygiene conditions and ways to bend them, including `syntax-case` and 
 `datum->syntax`. 
 
 The second reason I chose Scheme instead of a new language is that I _do_ want to create a 
@@ -66,6 +66,10 @@ like:
 
 (class Eq (self)
     (: = (-> self self bool)))
+    
+(instance Eq (Number)
+    (fn = (lhs rhs) (-> Number Number bool)
+        (num-equal lhs rhs)))
 ```
 
 So, I mentioned twice now that `scheme-rs` is a WIP, how close is it to being usable? Well,
@@ -84,7 +88,7 @@ this huge re-architecture because it would be immediately faster, I initiated it
 was necessary to eventually make `scheme-rs` competitive performance-wise with more mature
 Scheme compilers like `ChezScheme`.
 
-R6RS is a pretty massive spec, but I hop to complete it somewhat soon (although I started a new
+R6RS is a pretty massive spec, but I hope to complete it somewhat soon (although I started a new
 job recently, so no idea what that really means), and after that I hope to focus on making the
 compiler produce the best code as possible. In the mean time, I hope you consider taking a look
 at `scheme-rs`, and contributing if you find the project interesting. 
