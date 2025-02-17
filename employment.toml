@@ -1,5 +1,11 @@
 [[employment]]
   title = "Software Engineer"
+  company = "OneChronos"
+  timeline = "Feb. 2025 - Present"
+  features = [ "Rust engineer" ]
+
+[[employment]]
+  title = "Software Engineer"
   company = "Nova Labs Inc."
   timeline = "Aug. 2022 - Aug. 2024"
   features = [

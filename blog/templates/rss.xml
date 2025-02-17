@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Matthew Plant's Blog</title>
+    <description>Matthew Plant's Blog of Technical Musings</description>
+    <link>https://maplant.com</link>
+    <atom:link href="https://maplant.com/rss.xml" rel="self" type="application/rss+xml"/>
+    {% for article in articles %}
+    {% if !article.preprint %}
+    <item>
+      <title>{{article.title}}</title>
+      <description/>
+      <pubDate>{{article.date|fmt_rfc_822}}</pubDate>
+      <link>https://maplant.com/{{article.filename}}</link>
+      <guid isPermaLink="true">https://maplant.com/{{article.filename}}</guid>
+    </item>
+    {% endif %}
+    {% endfor %}
+  </channel>
+</rss>

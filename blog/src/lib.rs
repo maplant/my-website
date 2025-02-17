@@ -180,6 +180,23 @@ impl<'a> Articles<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "rss.xml")]
+pub struct Rss<'a> {
+    articles: &'a [Article],
+}
+
+impl<'a> Rss<'a> {
+    fn new(articles: &'a [Article]) -> Self {
+        Self { articles }
+    }
+
+    fn write(&self, path: &str) -> Result<()> {
+        fs::write(&format!("{path}/rss.xml"), &self.render()?)?;
+        Ok(())
+    }
+}
+
+#[derive(Template)]
 #[template(path = "notfound.html")]
 pub struct NotFound;
 
@@ -311,6 +328,8 @@ pub fn compile(
     projects.write(output_dir)?;
     let index = Index::new(&articles[..articles.len().min(5)], projects.active());
     index.write(output_dir)?;
+    let rss = Rss::new(&articles[..]);
+    rss.write(output_dir)?;
     let articles = Articles::new(&articles[..]);
     articles.write(output_dir)?;
     let notfound = NotFound::new();
@@ -325,5 +344,9 @@ pub fn compile(
 mod filters {
     pub fn fmt_date(date: &chrono::DateTime<chrono::Utc>) -> ::askama::Result<String> {
         Ok(format!("{}", date.format("%Y-%m-%d")))
+    }
+
+    pub fn fmt_rfc_822(date: &chrono::DateTime<chrono::Utc>) -> ::askama::Result<String> {
+        Ok(date.to_rfc2822())
     }
 }
