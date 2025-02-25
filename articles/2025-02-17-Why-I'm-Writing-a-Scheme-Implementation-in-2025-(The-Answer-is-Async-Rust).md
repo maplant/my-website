@@ -4,7 +4,7 @@ I really love Rust. I've been using it as my language of choice for about ten ye
 believe that it is a remarkably well designed language, and that includes the parts that are
 often most criticized, most notably async.
 
-But while I thing that async Rust is well designed from the context of the space it occupies,
+But while I think that async Rust is well designed from the context of the space it occupies,
 programming with it is not a particularly great experience once you finish your first draft
 of code and want to start iterating. As soon as you run `cargo build`, inconveniences show:
 slow compile times, inscrutable error messages with stack traces that are mostly just tokio
