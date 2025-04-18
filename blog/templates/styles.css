@@ -6,7 +6,8 @@ body {
     max-width: calc(min(760px, 100%));
     padding: 25px;
     margin: auto;
-    font-family: 'Anonymous Pro', monospace;
+    font-family: 'Lato';
+    text-align: justify;
 }
 
 table {
@@ -32,15 +33,15 @@ a:hover {
 
 .code {
     overflow-x: auto;
+    font-family: "Anonymous Pro", monospace;
 }
 
 @media (prefers-color-scheme: light) {
     body {
 
     }
-    code {
+    .code {
         background-color: #eeebeb;
-        font-family: "Anonymous Pro", monospace;
     }
     td, th {
 	border: 1px solid black;
