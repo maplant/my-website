@@ -6,8 +6,10 @@ body {
     max-width: calc(min(760px, 100%));
     padding: 25px;
     margin: auto;
-    font-family: 'Lato';
+    font-family: 'Work Sans', sans-serif;;
     text-align: justify;
+    font-optical-sizing: auto;
+    font-style: normal;
 }
 
 table {
