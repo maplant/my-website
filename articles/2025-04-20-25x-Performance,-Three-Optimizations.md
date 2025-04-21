@@ -5,8 +5,8 @@ creation of continuations mechanical. I would say that when implementing a langu
 "proper" ways to go about it:
 
 - Convert your program to some sort of bytecode that can run in a virtual machine. This makes implementing
-`call/cc` somewhat trivial; capturing the current continuation is akin to saving the stack and current IPC
-to be restored at a later time. With a bytecode virtual machine, this process can be made safe and efficient.
+`call/cc` somewhat trivial; capturing the current continuation is akin to saving the stack and current program
+counter to be restored at a later time. With a bytecode virtual machine, this process can be made safe and efficient.
 
 - Convert you program to [Continuation-Passing Style](https://en.wikipedia.org/wiki/Continuation-passing_style).
 Converting to CPS explicitly and mechanically describes the continuations of your program. After this is done,
