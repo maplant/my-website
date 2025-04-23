@@ -17,7 +17,7 @@ I decided to go with CPS because I thought it would be a more interesting learni
 with my goal of making `scheme-rs` as fast as possible; CPS is an appropriate IR to perform analysis and 
 optimizations on, and thus seems like the right move to make `scheme-rs` as fast as possible.[^1] 
 
-So to start, let's do some crude estimates with out interpreted implementation of scheme. Our benchmarking
+So to start, let's do some crude estimates with our interpreted implementation of scheme. Our benchmarking
 function will be the fibonacci function, and we will call it to calculate `fib(10000)`:
 ```scheme
 (define (fib n)
@@ -30,16 +30,16 @@ function will be the fibonacci function, and we will call it to calculate `fib(1
 (fib 10000)
 ```
 This is a pretty good target function to optimize because it sort of represents a maximally optimizable function:
-It's pure, does math, iterative, and just generally well known. So the success of most optimizations that we are 
-going to implement have some sort of impact on this function, and especially the case for optimizations early on 
-in the life of a compiler.
+It's pure, does math, iterative, and is just generally well known. So the success of most optimizations that we are 
+going to implement have some sort of impact on this function, and that is especially the case for optimizations early 
+on in the life of a compiler.
 
 On the final interpreted version of `scheme-rs`, calling this function took **40 ms** on average on my machine. 
-By way of comparison, `Guile` took **3 ms** on average. So over 10x faster. `Guile` is probably the scheme 
+By way of comparison, `Guile` took **3 ms** on average, so over 10x faster. `Guile` is probably the scheme 
 implementation installed on the _most_ computers, so it seems like a fine enough comparison. We will be trying to 
 compete with that.
 
-So I went away and implemented CPS. `scheme-rs` now took the AST, converted into CPS, converted _that_ into 
+So I went away and implemented CPS. `scheme-rs` now took the AST, converted that into CPS, converted _that_ into 
 `LLVM SSA`[^2], and then JIT compiled _that_. I ran my fib benchmarks:
 
 ```
@@ -50,7 +50,7 @@ fib 10000               time:   [356.36 ms <b>357.57 ms</b> 358.82 ms]
 
 Oh geez.
 
-Yeah, I bet you this was a story about making `scheme-rs` _super fast compared to other scheme implementations_. 
+Yeah, I bet you thought this was a story about making `scheme-rs` _super fast compared to other scheme implementations_. 
 Nope! It's a story about getting `scheme-rs` _back into the same ballpark!_
 
 But boy _did_ we get back to the same ballpark, through three optimizations.
@@ -290,10 +290,10 @@ compiling: TopLevelExpr {
 
 The problem with this output is that there are a lot of useless functions. That's bad, those all have overhead.
 
-From what I can tell, two ways to make good CPS: make the output good from the start, or run optimization passes 
-on output until it's good[^3]. 
+From what I can tell, there are two ways to make good CPS: make the output good from the start, or run optimization 
+passes on output until it's good[^3]. 
 
-I went with a relatively simple _beta reduction_ step. This effectively function inlining. We replace function calls
+I went with a relatively simple _beta reduction_ step. This is effectively function inlining. We replace function calls
 with the output of a function's body with the arguments of the function call substituted into the body. If after doing this some 
 number of times the function is no longer called, we can eliminate it completely. It's called beta reduction because
 that is what function application is called in the lambda calculus[^4]. 
@@ -303,6 +303,12 @@ in its continuation expression and is non-recursive, replace that use with a bet
 
 ```rust
 impl Cps {
+    pub(super) fn reduce(self) -> Self {
+        // Perform beta reduction twice. This seems like the sweet spot for now
+        self.beta_reduction(&mut HashMap::default())
+            .beta_reduction(&mut HashMap::default())
+    }
+
     /// Beta-reduction optimization step. This function replaces applications to
     /// functions with the body of the function with arguments substituted.
     ///
@@ -312,22 +318,18 @@ impl Cps {
     ///
     /// The uses analysis cache is absolutely demolished and dangerous to use by
     /// the end of this function.
-    fn beta_reduction(
-        self,
-        single_use_functions: &mut HashMap<Local, (ClosureArgs, Cps)>,
-        uses_cache: &mut HashMap<Local, HashMap<Local, usize>>,
-    ) -> Self {
+    fn beta_reduction(self, uses_cache: &mut HashMap<Local, HashMap<Local, usize>>) -> Self {
         match self {
             Cps::PrimOp(prim_op, values, result, cexp) => Cps::PrimOp(
                 prim_op,
                 values,
                 result,
-                Box::new(cexp.beta_reduction(single_use_functions, uses_cache)),
+                Box::new(cexp.beta_reduction(uses_cache)),
             ),
             Cps::If(cond, success, failure) => Cps::If(
                 cond,
-                Box::new(success.beta_reduction(single_use_functions, uses_cache)),
-                Box::new(failure.beta_reduction(single_use_functions, uses_cache)),
+                Box::new(success.beta_reduction(uses_cache)),
+                Box::new(failure.beta_reduction(uses_cache)),
             ),
             Cps::Closure {
                 args,
@@ -336,57 +338,72 @@ impl Cps {
                 cexp,
                 debug,
             } => {
-                let body = body.beta_reduction(single_use_functions, uses_cache);
-                let cexp = cexp.beta_reduction(single_use_functions, uses_cache);
+                let body = body.beta_reduction(uses_cache);
+                let mut cexp = cexp.beta_reduction(uses_cache);
 
                 let is_recursive = body.uses(uses_cache).contains_key(&val);
                 let uses = cexp.uses(uses_cache).get(&val).copied().unwrap_or(0);
 
+                // TODO: When we get more list primops, allow for variadic substitutions
                 if !args.variadic && !is_recursive && uses == 1 {
-                    single_use_functions.insert(val, (args, body));
-                    let cexp = cexp.beta_reduction(single_use_functions, uses_cache);
-                    if let Some((args, body)) = single_use_functions.remove(&val) {
+                    let reduced = cexp.reduce_function(val, &args, &body, uses_cache);
+                    if reduced {
                         uses_cache.remove(&val);
-                        Cps::Closure {
-                            args,
-                            body: Box::new(body),
-                            val,
-                            cexp: Box::new(cexp),
-                            debug,
-                        }
-                    } else {
-                        cexp
-                    }
-                } else {
-                    uses_cache.remove(&val);
-                    Cps::Closure {
-                        args,
-                        body: Box::new(body),
-                        val,
-                        cexp: Box::new(cexp),
-                        debug,
+                        return cexp;
                     }
                 }
-            }
-            Cps::App(Value::Var(Var::Local(operator)), applied, call_site_id)
-                if single_use_functions.contains_key(&operator) =>
-            {
-                let (args, mut body) = single_use_functions.remove(&operator).unwrap();
 
-                // Get the substitutions:
+                Cps::Closure {
+                    args,
+                    body: Box::new(body),
+                    val,
+                    cexp: Box::new(cexp),
+                    debug,
+                }
+            }
+            cexp => cexp,
+        }
+    }
+
+    fn reduce_function(
+        &mut self,
+        func: Local,
+        args: &ClosureArgs,
+        func_body: &Cps,
+        uses_cache: &mut HashMap<Local, HashMap<Local, usize>>,
+    ) -> bool {
+        let new = match self {
+            Cps::PrimOp(_, _, _, cexp) => {
+                return cexp.reduce_function(func, args, func_body, uses_cache)
+            }
+            Cps::If(_, succ, fail) => {
+                return succ.reduce_function(func, args, func_body, uses_cache)
+                    || fail.reduce_function(func, args, func_body, uses_cache)
+            }
+            Cps::Closure {
+                val, body, cexp, ..
+            } => {
+                let reduced = body.reduce_function(func, args, func_body, uses_cache)
+                    || cexp.reduce_function(func, args, func_body, uses_cache);
+                if reduced {
+                    uses_cache.remove(val);
+                }
+                return reduced;
+            }
+            Cps::App(Value::Var(Var::Local(operator)), applied, _) if *operator == func => {
                 let substitutions: HashMap<_, _> = args
                     .to_vec()
                     .into_iter()
                     .zip(applied.iter().cloned())
                     .collect();
-
-                // Perform the beta reduction:
+                let mut body = func_body.clone();
                 body.substitute(&substitutions);
-
                 body
             }
-            cexp => cexp,
-        }
+            Cps::App(_, _, _) | Cps::Forward(_, _) | Cps::Halt(_) => return false,
+        };
+        *self = new;
+        true
     }
 }
 ```
@@ -429,6 +446,9 @@ compiling: TopLevelExpr {
     },
 }
 ```
+
+I should note that my original implementation of this optimization was subtly buggy; I've since 
+replaced it with a more correct version that you see here.
 
 As stated earlier, this is by far the most effective optimization. In a couple hundred lines of code
 we re-gained all of the lost perf for our CPS conversion. Let's add a couple more optimizations:
@@ -661,22 +681,18 @@ better error handling and reporting, exception handlers and dynamic wind.
  
 ## Footnotes <a name="footnotes"></a>
 
-[^1]
+[^1]:
 I would like to point towards the word "thought" in the previous paragraph; this was simply the 
 conclusion I came to and we will have to decide at the end of this article if the decision was "right" or
 "wrong".
-
-[^2]
+[^2]:
 Why LLVM SSA and not _anything_ else, perhaps something more lightweight? Probably should have but I'm holding 
 out hope I can use LLVM to make my output _much_ faster in the long run. Also I stan Vikram Adve. Best teacher
 I've ever had.
-
-[^3] 
+[^3]:
 I call these the [Matt Might way](https://matt.might.net/articles/cps-conversion/) and the [Andrew Appel way](https://en.wikipedia.org/wiki/Andrew_Appel),
 respectively.
-
-[^4]
-https://en.wikipedia.org/wiki/Lambda_calculus#%CE%B2-reduction_2
-
-[^5] 
+[^4]:
+[see the wikipedia article on the lambda calculus](https://en.wikipedia.org/wiki/Lambda_calculus#%CE%B2-reduction_2)
+[^5]:
 This is a joke, obviously
