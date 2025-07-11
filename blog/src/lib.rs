@@ -48,7 +48,7 @@ impl Article {
         let mut output = Vec::new();
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
-            let contents = fs::read_to_string(entry.path())?;
+            let contents = fs::read_to_string(dbg!(entry.path()))?;
             let path = entry.path();
             let file_name = path.file_name().unwrap().to_str().unwrap();
             if file_name.ends_with("~") {
