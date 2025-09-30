@@ -11,8 +11,8 @@
       <title>{{article.title}}</title>
       <description/>
       <pubDate>{{article.date|fmt_rfc_822}}</pubDate>
-      <link>https://maplant.com/{{article.filename}}</link>
-      <guid isPermaLink="true">https://maplant.com/{{article.filename}}</guid>
+      <link>https://maplant.com/{{article.filename|urlencode}}</link>
+      <guid isPermaLink="true">https://maplant.com/{{article.filename|urlencode}}</guid>
     </item>
     {% endif %}
     {% endfor %}
