@@ -73,7 +73,7 @@ morecore(size_t num_units)
     void *vp;
     header_t *up;
 
-    if (num_units > MIN_ALLOC_SIZE)
+    if (num_units < MIN_ALLOC_SIZE)
         num_units = MIN_ALLOC_SIZE / sizeof(header_t);
 
     if ((vp = sbrk(num_units * sizeof(header_t))) == (void *) -1)
