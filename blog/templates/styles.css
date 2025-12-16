@@ -43,7 +43,7 @@ a:hover {
 
     }
     .code {
-        background-color: #eeebeb;
+        border: 1px dashed black;
     }
     td, th {
 	border: 1px solid black;
@@ -64,9 +64,8 @@ a:hover {
 }
 
 @media (prefers-color-scheme: dark) {
-    code {
-        background-color: #454545;
-        font-family: "Anonymous Pro", monospace;
+    .code {
+        border: 1px dashed white;
     }
     body {
 	color: white;

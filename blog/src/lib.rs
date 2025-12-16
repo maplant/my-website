@@ -242,9 +242,9 @@ fn theme_to_css(theme: inkjet::theme::Theme) -> String {
 
 impl Styles {
     pub fn new() -> Result<Self> {
-        let dark_theme = inkjet::theme::Theme::from_helix(inkjet::theme::vendored::SOLARIZED_DARK)?;
-        let light_theme =
-            inkjet::theme::Theme::from_helix(inkjet::theme::vendored::SOLARIZED_LIGHT)?;
+        let dark_theme =
+            inkjet::theme::Theme::from_helix(include_str!("selenized_black.toml"))?;
+        let light_theme = inkjet::theme::Theme::from_helix(include_str!("selenized_white.toml"))?;
 
         Ok(Self {
             dark_theme: theme_to_css(dark_theme),
