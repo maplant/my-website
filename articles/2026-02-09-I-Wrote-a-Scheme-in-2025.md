@@ -1,7 +1,9 @@
 One year minus one week ago to the day I [published an article](https://maplant.com/2025-02-17-Why-I%27m-Writing-a-Scheme-Implementation-in-2025-%28The-Answer-is-Async-Rust%29.html) 
-announcing the new Scheme implementation I was writing, [scheme-rs](https://www.scheme.rs). 
+announcing the new Scheme implementation I was writing, [scheme-rs](https://scheme-rs.org). 
 Today I am excited to announce that `scheme-rs` has reached its first version, 
-`0.1.0`.
+`0.1.0`. You can check it out at it's website (`scheme-rs.org`, which should be
+updated to `scheme.rs` at some point when DNS propagation finishes) or its
+[github page](https://github.com/maplant/scheme-rs).
 
 Although there's much more work to do (and I will talk about that further down 
 the page), after reaching the milestone of completing `2258` tests in the R6RS 
@@ -67,7 +69,7 @@ much smarter than me. And more miraculously it directly lead me to finding a job
 that I absolutely love.
 
 `scheme-rs` is not particularly special in this regard. It was simply something 
-that challenged me. And if you have a brain at all like mine, I hightly 
+that challenged me. And if you have a brain at all like mine, I highly 
 recommend you find a project that challenges you like `scheme-rs` challenged me.
 
 If you like being challenged and enjoy functional programming and Rust as much
