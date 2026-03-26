@@ -58,7 +58,7 @@ Astute readers may recognize this as an [algebraic effect](https://en.wikipedia.
 Indeed, dynamic delimited continuations and prompts are a primitive we can use 
 to implement complex effect systems. 
 
-Just like and effect system, the value of an implementation like this is that it
+Just like an effect system, the value of an implementation like this is that it
 is _composable_:
 
 ```scheme
